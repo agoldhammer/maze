@@ -121,20 +121,21 @@
 
 (defn search-at
   "search at loc, having come from"
-  [loc come-from]
+  [loc came-from]
+  (on-debug (println "searching " loc))
   (swap! visited* conj loc)
   (if (= loc @goal*)
     :found
-    (let [coming-from (conj come-from loc)
+    (let [coming-from (conj came-from loc)
           frontier (filter #(not (visited? %)) (successors loc))]
       (on-debug (println "coming from" coming-from))
       (on-debug (println "frontier" frontier)
                 (println "visited" @visited*))
-      (let [retval
-            (for [next frontier]
-              (search-at next coming-from))]
-        (on-debug (println "retval" retval))
-        retval)
+      (loop [next (first frontier)
+             remaining (rest frontier)]
+        (if (= :found (search-at next coming-from))
+          :found
+          (recur (first remaining) (rest remaining))))
       )))
 
 (defn start-search
