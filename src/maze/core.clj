@@ -1,9 +1,18 @@
 (ns maze.core
   (:gen-class))
 
-(def *start* (atom []))
-(def *goal* (atom []))
-(def *maze* (atom []))
+(def DEBUG false)
+
+(defmacro on-debug [& body]
+  `(when DEBUG
+     (do ~@body)))
+
+(def start* (atom []))
+(def goal* (atom []))
+(def maze* (atom []))
+(def size* (atom 0))
+(def sparsity* (atom 1))
+(def visited* (atom #{}))
 
 ;; create an n x n maze
 (defn create-maze
@@ -67,19 +76,72 @@
   [size sparsity]
   (let [base (make-maze size sparsity)
         [start goal] (choose-start-finish size)]
-    (reset! *start* start)
-    (reset! *goal*  goal)
-    (reset! *maze* 
+    (reset! start* start)
+    (reset! goal*  goal)
+    (reset! size* size)
+    (reset! sparsity* sparsity)
+    (reset! maze* 
             (->
-              base
-              (update-maze start "S")
-              (update-maze goal "G")))))
+             base
+             (update-maze start "S")
+             (update-maze goal "G")))))
 
 (defn print-maze
   []
-  (pprint @*maze*)
-  (println "Start:" @*start*)
-  (println "Goal:" @*goal*))
+  (pprint @maze*)
+  (println "Size: " @size* " Sparsity: " @sparsity*)
+  (println "Start:" @start*)
+  (println "Goal:" @goal*))
+
+(defn in-bounds?
+  "check coord in bounds for size"
+  [w size]
+  (if (and (>= w 0) (< w size))
+    w
+    false))
+
+(defn successors
+  "return set of successors to loc"
+  [loc]
+  (let [[x y] loc
+        size @size*
+        x- (dec x)
+        x+ (inc x)
+        y- (dec y)
+        y+ (inc y)
+        s1 (for [xn (filter #(in-bounds? % size) (list x- x+))] [xn y])
+        s2 (for [yn (filter #(in-bounds? % size) (list y- y+))] [x yn])]
+    (into s1 s2))
+  )
+
+(defn visited?
+  "has loc been visited?"
+  [loc]
+  (contains? @visited* loc))
+
+(defn search-at
+  "search at loc, having come from"
+  [loc come-from]
+  (swap! visited* conj loc)
+  (if (= loc @goal*)
+    :found
+    (let [coming-from (conj come-from loc)
+          frontier (filter #(not (visited? %)) (successors loc))]
+      (on-debug (println "coming from" coming-from))
+      (on-debug (println "frontier" frontier)
+                (println "visited" @visited*))
+      (let [retval
+            (for [next frontier]
+              (search-at next coming-from))]
+        (on-debug (println "retval" retval))
+        retval)
+      )))
+
+(defn start-search
+  "start a new search"
+  []
+  (reset! visited* #{})
+  (search-at @start* []))
 
 (defn -main
   "I don't do a whole lot ... yet."
