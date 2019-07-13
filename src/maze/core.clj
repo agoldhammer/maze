@@ -26,11 +26,41 @@
       ".")))
 
 (defn put-wall-in-row
-  [row sparsity]
+  [len sparsity]
   (let [f (change-randomly sparsity)]
-    (vec 
-     (for [n (range (count row))]
-       (f (nth row n))))))
+    (mapv f (range len))))
+
+(defn make-maze
+  [size sparsity]
+    (vec (repeatedly size #(put-wall-in-row size sparsity))))
+
+; a loc is a vec pair [row col]
+(defn random-loc
+  [size]
+    ((juxt rand-int rand-int) size))
+
+(defn update-maze
+  [maze loc elt]
+  (update-in maze loc (constantly elt)))
+
+(defn choose-start-finish
+  "choose start and finish locs randomly, making sure they are not equal"
+  [size]
+  (let [start (random-loc size)
+        finish (repeatedly #(random-loc size))]
+    (let [new-finish
+          (first (drop-while #(= start %) finish))]
+      [start new-finish])))
+
+(defn make-full-maze
+  [size sparsity]
+  (let [base (make-maze size sparsity)
+        [start goal] (choose-start-finish size)]
+    (->
+     base
+     (update-maze start "S")
+     (update-maze goal "G"))
+    ))
 
 (defn -main
   "I don't do a whole lot ... yet."
