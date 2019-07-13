@@ -1,6 +1,10 @@
 (ns maze.core
   (:gen-class))
 
+(def *start* (atom []))
+(def *goal* (atom []))
+(def *maze* (atom []))
+
 ;; create an n x n maze
 (defn create-maze
   [n]
@@ -19,9 +23,10 @@
 (def maze8 (create-maze 8))
 
 (defn change-randomly
+  "place wall elements with uniform sparsity on scale of 100"
   [sparsity]
   (fn [elt]
-    (if (< (rand-int 10) sparsity)
+    (if (< (rand-int 100) sparsity)
       "x"
       ".")))
 
@@ -31,15 +36,18 @@
     (mapv f (range len))))
 
 (defn make-maze
+  "make a bare maze of given size with wall elements of sparsity 0-99"
   [size sparsity]
-    (vec (repeatedly size #(put-wall-in-row size sparsity))))
+  (vec (repeatedly size #(put-wall-in-row size sparsity))))
 
 ; a loc is a vec pair [row col]
 (defn random-loc
+  "return a random location in maze of given size"
   [size]
-    ((juxt rand-int rand-int) size))
+  ((juxt rand-int rand-int) size))
 
 (defn update-maze
+  "update maze at loc with given elt"
   [maze loc elt]
   (update-in maze loc (constantly elt)))
 
@@ -48,19 +56,30 @@
   [size]
   (let [start (random-loc size)
         finish (repeatedly #(random-loc size))]
+ 
     (let [new-finish
           (first (drop-while #(= start %) finish))]
       [start new-finish])))
 
 (defn make-full-maze
+  "make maze of given size and sparsity with S and G
+   indicating start and goal positions"
   [size sparsity]
   (let [base (make-maze size sparsity)
         [start goal] (choose-start-finish size)]
-    (->
-     base
-     (update-maze start "S")
-     (update-maze goal "G"))
-    ))
+    (reset! *start* start)
+    (reset! *goal*  goal)
+    (reset! *maze* 
+            (->
+              base
+              (update-maze start "S")
+              (update-maze goal "G")))))
+
+(defn print-maze
+  []
+  (pprint @*maze*)
+  (println "Start:" @*start*)
+  (println "Goal:" @*goal*))
 
 (defn -main
   "I don't do a whole lot ... yet."
