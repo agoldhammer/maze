@@ -1,4 +1,5 @@
 (ns maze.core
+  [:require [clojure.pprint :as cljp]]
   (:gen-class))
 
 (def DEBUG false)
@@ -88,7 +89,7 @@
 
 (defn print-maze
   []
-  (pprint @maze*)
+  (cljp/pprint @maze*)
   (println "Size: " @size* " Sparsity: " @sparsity*)
   (println "Start:" @start*)
   (println "Goal:" @goal*))
@@ -99,6 +100,12 @@
   (if (and (>= w 0) (< w size))
     w
     false))
+
+(defn not-blocked?
+  "is loc blocked?"
+  [loc]
+  (not= "x" 
+     (get-in @maze* loc)))
 
 (defn successors
   "return set of successors to loc"
@@ -111,7 +118,7 @@
         y+ (inc y)
         s1 (for [xn (filter #(in-bounds? % size) (list x- x+))] [xn y])
         s2 (for [yn (filter #(in-bounds? % size) (list y- y+))] [x yn])]
-    (into s1 s2))
+    (filter not-blocked? (into s1 s2)))
   )
 
 (defn visited?
@@ -125,7 +132,8 @@
   (on-debug (println "searching " loc))
   (swap! visited* conj loc)
   (if (= loc @goal*)
-    :found
+    {:found true
+     :path came-from}
     (let [coming-from (conj came-from loc)
           frontier (filter #(not (visited? %)) (successors loc))]
       (on-debug (println "coming from" coming-from))
@@ -133,10 +141,12 @@
                 (println "visited" @visited*))
       (loop [next (first frontier)
              remaining (rest frontier)]
-        (if (= :found (search-at next coming-from))
-          :found
-          (recur (first remaining) (rest remaining))))
-      )))
+        (if next
+          (let [path (search-at next coming-from)]
+            (if (:found path)
+              path
+              (recur (first remaining) (rest remaining))))
+          {:found false})))))
 
 (defn start-search
   "start a new search"
