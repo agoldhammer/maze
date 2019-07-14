@@ -2,11 +2,18 @@
   [:require [clojure.pprint :as cljp]]
   (:gen-class))
 
-(def DEBUG false)
+(def DEBUG 0)
 
 (defmacro on-debug [& body]
-  `(when DEBUG
+  `(when (> DEBUG 1)
      (do ~@body)))
+
+(defmacro dbg [x]
+  `(when (> DEBUG 0)
+     (println ~(format "%s:%s> is"
+                       *file*
+                       (:line (meta &form)))
+              ~x)))
 
 (def start* (atom []))
 (def goal* (atom []))
@@ -85,11 +92,13 @@
             (->
              base
              (update-maze start "S")
-             (update-maze goal "G")))))
+             (update-maze goal "G"))))
+  (print-maze))
 
 (defn print-maze
   []
-  (cljp/pprint @maze*)
+  (doseq [ln @maze*]
+    (println ln))
   (println "Size: " @size* " Sparsity: " @sparsity*)
   (println "Start:" @start*)
   (println "Goal:" @goal*))
@@ -148,11 +157,27 @@
               (recur (first remaining) (rest remaining))))
           {:found false})))))
 
+(defn update-maze-indexed
+  "insert index")
+(defn overlay-path
+  "print maze with search path overlay"
+  [path]
+  ;; drop the starting node
+  (let [reduced-path (drop 1 path)
+        maze @maze*
+        index (map #(mod % 10) (range (count reduced-path)))
+        indexed-path (partition 2 (interleave index reduced-path))]
+    (reduce #(update-maze %1 (second %2) (str (first %2))) maze indexed-path)))
+
 (defn start-search
   "start a new search"
   []
   (reset! visited* #{})
-  (search-at @start* []))
+  (let [{:keys [found path]} (search-at @start* [])]
+    (if found
+      (doseq [ln (overlay-path path)]
+        (println ln))
+      (println "No path was found"))))
 
 (defn -main
   "I don't do a whole lot ... yet."
