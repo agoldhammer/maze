@@ -173,21 +173,26 @@
   (reset! visited* #{})
   (let [start @start*]
     (loop [frontier [{:loc start :path [start]}]]
-      (let [working-node (first frontier)
-            loc (:loc working-node)
-            path (:path working-node)]
-        (swap! visited* conj loc)
-        (cond
-          (nil? loc) {:found false}
-          (at-goal? loc) {:found true :path path}
-          :else (let [succ (successors loc)
-                      unvisited (filter #(not (visited? %)) succ)
-                      nodes (mapv #(loc->node % path) unvisited)
-                      new-frontier (vec (into (subvec frontier 1) nodes))]
-                  #_(println "new-frontier " new-frontier)
-                  #_(println "visited" @visited*)
-                  #_(println (vector new-frontier new-path @visited*))
-                  (recur new-frontier)))))
+      (if (not (empty? frontier))
+        (let [working-node (first frontier)
+              loc (:loc working-node)
+              path (:path working-node)]
+          (if (not (visited? loc))
+            
+            (do (swap! visited* conj loc)
+                (cond
+                  (nil? loc) {:found false}
+                  (at-goal? loc) {:found true :path path}
+                  :else (let [succ (successors loc)
+                              unvisited (filter #(not (visited? %)) succ)
+                              nodes (mapv #(loc->node % path) unvisited)
+                              new-frontier (vec (into (subvec frontier 1) nodes))]
+                          #_(println "new-frontier " new-frontier)
+                          #_(println "visited" @visited*)
+                          #_(println (vector new-frontier new-path @visited*))
+                          (recur new-frontier))))
+            (recur (subvec frontier 1))))
+        {:found false}))
     ))
 
 (defn overlay-path
