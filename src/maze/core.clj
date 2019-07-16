@@ -93,12 +93,12 @@
              base
              (update-maze start "S")
              (update-maze goal "G"))))
-  (print-maze))
+  (print-maze false))
 
 (defn print-maze
-  []
-  (doseq [ln @maze*]
-    (println ln))
+  [doprint]
+  (if doprint (doseq [ln @maze*]
+                (println ln)))
   (println "Size: " @size* " Sparsity: " @sparsity*)
   (println "Start:" @start*)
   (println "Goal:" @goal*))
@@ -139,7 +139,7 @@
   [loc]
   (= loc @goal*))
 
-(defn search-at
+#_(defn search-at
   "search at loc, having come from"
   [loc came-from]
   (on-debug (println "searching " loc))
@@ -167,33 +167,52 @@
   [loc path]
   {:loc loc :path (conj path loc)})
 
-(defn start-bfs
+(defn dfs
+  "depth-first search"
+  [start]
+  (loop [frontier [{:loc start :path [start]}]]
+    #_(println "\nvisited " @visited*)
+    #_(println "frontier " frontier)
+    (if (not (empty? frontier))
+      (let [working-node (peek frontier)
+            {:keys [loc path]} working-node]
+        #_(println "working node" working-node)
+        #_(println "loc path " loc " " path)
+        (if (not (visited? loc))
+          (do (swap! visited* conj loc)
+              (cond
+                (nil? loc) {:found false}
+                (at-goal? loc) {:found true :path path}
+                :else (let [succ (successors loc)
+                            #_(println "succ " succ)
+                            unvisited (filter #(not (visited? %)) succ)
+                            nodes (mapv #(loc->node % path) unvisited)
+                            #_(println "nodes " nodes)
+                            new-frontier (vec (into (pop frontier) nodes))]
+                        (recur new-frontier))))
+          (recur (pop frontier))))
+      {:found false})))
+
+(defn bfs
   "breadth-first search"
-  []
-  (reset! visited* #{})
-  (let [start @start*]
-    (loop [frontier [{:loc start :path [start]}]]
-      (if (not (empty? frontier))
-        (let [working-node (first frontier)
-              loc (:loc working-node)
-              path (:path working-node)]
-          (if (not (visited? loc))
-            
-            (do (swap! visited* conj loc)
-                (cond
-                  (nil? loc) {:found false}
-                  (at-goal? loc) {:found true :path path}
-                  :else (let [succ (successors loc)
-                              unvisited (filter #(not (visited? %)) succ)
-                              nodes (mapv #(loc->node % path) unvisited)
-                              new-frontier (vec (into (subvec frontier 1) nodes))]
-                          #_(println "new-frontier " new-frontier)
-                          #_(println "visited" @visited*)
-                          #_(println (vector new-frontier new-path @visited*))
-                          (recur new-frontier))))
-            (recur (subvec frontier 1))))
-        {:found false}))
-    ))
+  [start]
+  (loop [frontier [{:loc start :path [start]}]]
+    (if (not (empty? frontier))
+      (let [working-node (first frontier)
+            {:keys [loc path]} working-node]
+        (if (not (visited? loc))
+          (do (swap! visited* conj loc)
+            (cond
+              (nil? loc) {:found false}
+              (at-goal? loc) {:found true :path path}
+              :else (let [succ (successors loc)
+                          unvisited (filter #(not (visited? %)) succ)
+                          nodes (mapv #(loc->node % path) unvisited)
+                          new-frontier (vec (into (subvec frontier 1) nodes))]
+                      (recur new-frontier))))
+          (recur (subvec frontier 1))))
+      {:found false}))
+  )
 
 (defn overlay-path
   "print maze with search path overlay"
@@ -205,7 +224,7 @@
         indexed-path (partition 2 (interleave index reduced-path))]
     (reduce #(update-maze %1 (second %2) (str (first %2))) maze indexed-path)))
 
-(defn start-search
+#_(defn start-search
   "start a new search"
   []
   (reset! visited* #{})
@@ -217,15 +236,27 @@
 
 (defn start-bfs-search
   "start a new bfs search"
+  [doprint]
+  (reset! visited* #{})
+  (let [{:keys [found path]} (bfs @start*)]
+    (if found
+      (if doprint
+        (doseq [ln (overlay-path (drop-last 1 path))]
+          (println ln))
+        (println "Path length: " (count path)))
+      (println "No path was found"))))
+
+(defn start-dfs-search
+  "start a new dfs search"
   []
   (reset! visited* #{})
-  (let [{:keys [found path]} (start-bfs)]
+  (let [{:keys [found path]} (dfs @start*)]
     (if found
       (doseq [ln (overlay-path (drop-last 1 path))]
         (println ln))
       (println "No path was found"))))
 
-(defn new-maze-problem
+#_(defn new-maze-problem
   [size sparsity]
   (make-full-maze size sparsity)
   (start-search))
