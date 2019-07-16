@@ -1,5 +1,4 @@
 (ns maze.core
-  [:require [clojure.pprint :as cljp]]
   (:gen-class))
 
 (def DEBUG 0)
@@ -15,6 +14,7 @@
                        (:line (meta &form)))
               ~x)))
 
+(declare print-maze)
 (def start* (atom []))
 (def goal* (atom []))
 (def maze* (atom []))
@@ -127,7 +127,7 @@
         y+ (inc y)
         s1 (for [xn (filter #(in-bounds? % size) (list x- x+))] [xn y])
         s2 (for [yn (filter #(in-bounds? % size) (list y- y+))] [x yn])]
-    (filter not-blocked? (into s1 s2)))
+    (apply vector (filter not-blocked? (into s1 s2))))
   )
 
 (defn visited?
@@ -135,12 +135,16 @@
   [loc]
   (contains? @visited* loc))
 
+(defn- at-goal?
+  [loc]
+  (= loc @goal*))
+
 (defn search-at
   "search at loc, having come from"
   [loc came-from]
   (on-debug (println "searching " loc))
   (swap! visited* conj loc)
-  (if (= loc @goal*)
+  (if (at-goal? loc)
     {:found true
      :path came-from}
     (let [coming-from (conj came-from loc)
@@ -157,8 +161,35 @@
               (recur (first remaining) (rest remaining))))
           {:found false})))))
 
-(defn update-maze-indexed
-  "insert index")
+; a node is a map with components loc and parent
+(defn loc->node
+  "create a node from a loc by adding parent"
+  [loc path]
+  {:loc loc :path (conj path loc)})
+
+(defn start-bfs
+  "breadth-first search"
+  []
+  (reset! visited* #{})
+  (let [start @start*]
+    (loop [frontier [{:loc start :path [start]}]]
+      (let [working-node (first frontier)
+            loc (:loc working-node)
+            path (:path working-node)]
+        (swap! visited* conj loc)
+        (cond
+          (nil? loc) {:found false}
+          (at-goal? loc) {:found true :path path}
+          :else (let [succ (successors loc)
+                      unvisited (filter #(not (visited? %)) succ)
+                      nodes (mapv #(loc->node % path) unvisited)
+                      new-frontier (vec (into (subvec frontier 1) nodes))]
+                  #_(println "new-frontier " new-frontier)
+                  #_(println "visited" @visited*)
+                  #_(println (vector new-frontier new-path @visited*))
+                  (recur new-frontier)))))
+    ))
+
 (defn overlay-path
   "print maze with search path overlay"
   [path]
@@ -178,6 +209,21 @@
       (doseq [ln (overlay-path path)]
         (println ln))
       (println "No path was found"))))
+
+(defn start-bfs-search
+  "start a new bfs search"
+  []
+  (reset! visited* #{})
+  (let [{:keys [found path]} (start-bfs)]
+    (if found
+      (doseq [ln (overlay-path (drop-last 1 path))]
+        (println ln))
+      (println "No path was found"))))
+
+(defn new-maze-problem
+  [size sparsity]
+  (make-full-maze size sparsity)
+  (start-search))
 
 (defn -main
   "I don't do a whole lot ... yet."
