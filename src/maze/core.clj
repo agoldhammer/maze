@@ -22,12 +22,7 @@
 (def sparsity* (atom 1))
 (def visited* (atom #{}))
 
-;; create an n x n maze
-(defn create-maze
-  [n]
-  {:size n
-   :maze (vec (repeat 8 (vec (range n))))
-   })
+(deftype Node [loc path])
 
 (defn check-coord
   [loc limit]
@@ -36,8 +31,6 @@
        (> loc limit))
     :err
     loc))
-
-(def maze8 (create-maze 8))
 
 (defn change-randomly
   "place wall elements with uniform sparsity on scale of 100"
@@ -106,10 +99,13 @@
   (println "Goal:" @goal*))
 
 (defn print-maze
-  []
-  (doseq [ln @maze*]
-    (println ln))
-  (print-maze-params))
+  "if doall, print maze with params; else just print params"
+  ([] (print-maze true))
+  ([doall]
+   (when doall
+     (doseq [ln @maze*]
+       (println ln)))
+   (print-maze-params)))
 
 (defn in-bounds?
   "check coord in bounds for size"
@@ -268,10 +264,11 @@
         (println ln))
       (println "No path was found"))))
 
-#_(defn new-maze-problem
+(defn new-maze-problem
   [size sparsity]
   (make-full-maze size sparsity)
-  (start-search))
+  (start-bfs-search)
+  (start-dfs-search))
 
 (defn -main
   "I don't do a whole lot ... yet."
