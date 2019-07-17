@@ -80,28 +80,36 @@
 
 (defn make-full-maze
   "make maze of given size and sparsity with S and G
-   indicating start and goal positions"
-  [size sparsity]
-  (let [base (make-maze size sparsity)
-        [start goal] (choose-start-finish size)]
-    (reset! start* start)
-    (reset! goal*  goal)
-    (reset! size* size)
-    (reset! sparsity* sparsity)
-    (reset! maze* 
-            (->
-             base
-             (update-maze start "S")
-             (update-maze goal "G"))))
-  (print-maze false))
+   indicating start and goal positions; print if doprint is true"
+  ([size sparsity]
+   (make-full-maze size sparsity true))
+  ([size sparsity doprint]
+   (let [base (make-maze size sparsity)
+         [start goal] (choose-start-finish size)]
+     (reset! start* start)
+     (reset! goal*  goal)
+     (reset! size* size)
+     (reset! sparsity* sparsity)
+     (reset! maze* 
+             (->
+              base
+              (update-maze start "S")
+              (update-maze goal "G"))))
+   (when doprint
+     (print-maze))))
 
-(defn print-maze
-  [doprint]
-  (if doprint (doseq [ln @maze*]
-                (println ln)))
+(defn print-maze-params
+  "print just maze parameters, not maze itself"
+  []
   (println "Size: " @size* " Sparsity: " @sparsity*)
   (println "Start:" @start*)
   (println "Goal:" @goal*))
+
+(defn print-maze
+  []
+  (doseq [ln @maze*]
+    (println ln))
+  (print-maze-params))
 
 (defn in-bounds?
   "check coord in bounds for size"
@@ -235,16 +243,20 @@
       (println "No path was found"))))
 
 (defn start-bfs-search
-  "start a new bfs search"
-  [doprint]
-  (reset! visited* #{})
-  (let [{:keys [found path]} (bfs @start*)]
-    (if found
-      (if doprint
-        (doseq [ln (overlay-path (drop-last 1 path))]
-          (println ln))
-        (println "Path length: " (count path)))
-      (println "No path was found"))))
+   "start a new bfs search; print path overlaid result if doprint is true"
+  ([]
+   (start-bfs-search true))
+  ([doprint]
+   (reset! visited* #{})
+   (let [{:keys [found path]} (bfs @start*)]
+     (if found
+       (do 
+         (if doprint
+           (doseq [ln (overlay-path (drop-last 1 path))]
+             (println ln))
+           (println "Path length: " (count path)))
+         (print-maze-params))
+       (println "No path was found")))))
 
 (defn start-dfs-search
   "start a new dfs search"
