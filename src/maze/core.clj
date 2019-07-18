@@ -24,6 +24,30 @@
 
 (deftype Node [loc path])
 
+(deftype DFSFrontier [nodes])
+
+(deftype BFSFrontier [nodes])
+
+(deftype AStarFrontier[nodes])
+
+(defn init-frontier
+  "return a frontier with 1 node: loc start and path empty"
+  []
+  [{:loc @start* :path []}])
+
+(defmulti peek-next-in-frontier class)
+
+(defmethod peek-next-in-frontier BFSFrontier
+  [frontier]
+  (nth (.nodes frontier) 0))
+
+(defmulti remainder-of-frontier class)
+
+(defmethod remainder-of-frontier BFSFrontier
+  [frontier]
+  (->BFSFrontier 
+    (subvec (.nodes frontier) 1)))
+
 (defn check-coord
   [loc limit]
   (if 
