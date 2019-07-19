@@ -48,6 +48,28 @@
   (->BFSFrontier 
     (subvec (.nodes frontier) 1)))
 
+(defn dispatch-n-to-f [a _] (class a))
+
+(defmulti add-nodes-to-frontier (fn [x y] [(class x) (class y)]))
+
+(defmethod add-nodes-to-frontier [BFSFrontier clojure.lang.PersistentVector]
+  [frontier nodes]
+  #_(->BFSFrontier (vec (into (.nodes (remainder-of-frontier frontier)) nodes)))
+  (println "wtf?")
+  (println "eureka " frontier nodes))
+
+(defmulti print-frontier class)
+
+(defmethod print-frontier BFSFrontier
+  [frontier]
+  (println "Node count: " (count (.nodes frontier))))
+
+(defmulti dummy (fn [x y] [(class x) (class y)]))
+
+(defmethod dummy [java.lang.String java.lang.String]
+  [a b]
+  (println a b))
+
 (defn check-coord
   [loc limit]
   (if 
