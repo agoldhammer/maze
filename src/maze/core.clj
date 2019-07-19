@@ -22,53 +22,76 @@
 (def sparsity* (atom 1))
 (def visited* (atom #{}))
 
-(deftype Node [loc path])
+; (deftype Node [loc path])
 
-(deftype DFSFrontier [nodes])
+; (deftype DFSFrontier [nodes])
 
-(deftype BFSFrontier [nodes])
+; (deftype BFSFrontier [nodes])
 
-(deftype AStarFrontier[nodes])
+; (deftype AStarFrontier[nodes])
+
+; (defmulti peek-next-in-frontier class)
+
+; (defmethod peek-next-in-frontier BFSFrontier
+;   [frontier]
+;   (nth (.nodes frontier) 0))
+
+; (defmulti remainder-of-frontier class)
+
+; (defmethod remainder-of-frontier BFSFrontier
+;   [frontier]
+;   (->BFSFrontier 
+;     (subvec (.nodes frontier) 1)))
+
+; (defn dispatch-n-to-f [a _] (class a))
+
+; (defmulti add-nodes-to-frontier (fn [x y] [(class x) (class y)]))
+
+; (defmethod add-nodes-to-frontier [BFSFrontier clojure.lang.PersistentVector]
+;   [frontier nodes]
+;   #_(->BFSFrontier (vec (into (.nodes (remainder-of-frontier frontier)) nodes)))
+;   (println "wtf?")
+;   (println "eureka " frontier nodes))
+
+; (defmulti print-frontier class)
+
+; (defmethod print-frontier BFSFrontier
+;   [frontier]
+;   (println "Node count: " (count (.nodes frontier))))
 
 (defn init-frontier
   "return a frontier with 1 node: loc start and path empty"
   []
   [{:loc @start* :path []}])
 
-(defmulti peek-next-in-frontier class)
+;; TODO
+; this is a dummy for testing, remove later!!
+(def dummy-vec-of-nodes
+  [{:loc [1 2] :path [[0 1]]}
+   {:loc [2 3] :path [[0 1] [1 2]]}])
 
-(defmethod peek-next-in-frontier BFSFrontier
-  [frontier]
-  (nth (.nodes frontier) 0))
+(defprotocol Frontier
+  "protocol for handling various frontier types"
+  (get-next [this] "get next node")
+  (remainder [this] "remainder after dropping the next node")
+  (add-nodes [this vec-of-nodes] "add nodes in vector and return new frontier")
+  )
 
-(defmulti remainder-of-frontier class)
+(deftype Bfs [nodes])
 
-(defmethod remainder-of-frontier BFSFrontier
-  [frontier]
-  (->BFSFrontier 
-    (subvec (.nodes frontier) 1)))
+(extend-protocol Frontier
+  Bfs
+  (get-next [this]
+    (nth (.nodes this) 0))
+  (remainder [this]
+             (->Bfs (subvec (.nodes this) 1)))
+  (add-nodes [this v-of-nodes]
+             (->Bfs (vec (into (.nodes (remainder this)) v-of-nodes)))))
 
-(defn dispatch-n-to-f [a _] (class a))
-
-(defmulti add-nodes-to-frontier (fn [x y] [(class x) (class y)]))
-
-(defmethod add-nodes-to-frontier [BFSFrontier clojure.lang.PersistentVector]
-  [frontier nodes]
-  #_(->BFSFrontier (vec (into (.nodes (remainder-of-frontier frontier)) nodes)))
-  (println "wtf?")
-  (println "eureka " frontier nodes))
-
-(defmulti print-frontier class)
-
-(defmethod print-frontier BFSFrontier
-  [frontier]
-  (println "Node count: " (count (.nodes frontier))))
-
-(defmulti dummy (fn [x y] [(class x) (class y)]))
-
-(defmethod dummy [java.lang.String java.lang.String]
-  [a b]
-  (println a b))
+(defn bfs-start
+  "return initial frontier for breadth first search"
+  []
+  (->Bfs (init-frontier)))
 
 (defn check-coord
   [loc limit]
