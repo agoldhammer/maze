@@ -22,47 +22,11 @@
 (def sparsity* (atom 1))
 (def visited* (atom #{}))
 
-; (deftype Node [loc path])
-
-; (deftype DFSFrontier [nodes])
-
-; (deftype BFSFrontier [nodes])
-
-; (deftype AStarFrontier[nodes])
-
-; (defmulti peek-next-in-frontier class)
-
-; (defmethod peek-next-in-frontier BFSFrontier
-;   [frontier]
-;   (nth (.nodes frontier) 0))
-
-; (defmulti remainder-of-frontier class)
-
-; (defmethod remainder-of-frontier BFSFrontier
-;   [frontier]
-;   (->BFSFrontier 
-;     (subvec (.nodes frontier) 1)))
-
-; (defn dispatch-n-to-f [a _] (class a))
-
-; (defmulti add-nodes-to-frontier (fn [x y] [(class x) (class y)]))
-
-; (defmethod add-nodes-to-frontier [BFSFrontier clojure.lang.PersistentVector]
-;   [frontier nodes]
-;   #_(->BFSFrontier (vec (into (.nodes (remainder-of-frontier frontier)) nodes)))
-;   (println "wtf?")
-;   (println "eureka " frontier nodes))
-
-; (defmulti print-frontier class)
-
-; (defmethod print-frontier BFSFrontier
-;   [frontier]
-;   (println "Node count: " (count (.nodes frontier))))
-
 (defn init-frontier
-  "return a frontier with 1 node: loc start and path empty"
+  "return a frontier with 1 node: loc start and path at start"
   []
-  [{:loc @start* :path []}])
+  (let [start-loc @start*]
+    [{:loc start-loc :path [start-loc]}]))
 
 ;; TODO
 ; this is a dummy for testing, remove later!!
@@ -90,6 +54,13 @@
     (->Fifo (vec (into (.nodes (remainder this)) v-of-nodes))))
   (deserted? [this]
              (empty? (.nodes this))))
+
+;; TODO ------------------------------------
+(deftype Stack [nodes])
+
+(deftype PriQ [nodes])
+
+;; -----------------------------------------
 
 (defn bfs-start
   "return initial frontier for breadth first search"
@@ -215,35 +186,13 @@
   [loc]
   (= loc @goal*))
 
-#_(defn search-at
-  "search at loc, having come from"
-  [loc came-from]
-  (on-debug (println "searching " loc))
-  (swap! visited* conj loc)
-  (if (at-goal? loc)
-    {:found true
-     :path came-from}
-    (let [coming-from (conj came-from loc)
-          frontier (filter #(not (visited? %)) (successors loc))]
-      (on-debug (println "coming from" coming-from))
-      (on-debug (println "frontier" frontier)
-                (println "visited" @visited*))
-      (loop [next (first frontier)
-             remaining (rest frontier)]
-        (if next
-          (let [path (search-at next coming-from)]
-            (if (:found path)
-              path
-              (recur (first remaining) (rest remaining))))
-          {:found false})))))
-
 ; a node is a map with components loc and parent
 (defn loc->node
   "create a node from a loc by adding parent"
   [loc path]
   {:loc loc :path (conj path loc)})
 
-(defn dfs
+#_(defn dfs
   "depth-first search"
   [start]
   (loop [frontier [{:loc start :path [start]}]]
@@ -269,7 +218,7 @@
           (recur (pop frontier))))
       {:found false})))
 
-(defn bfs
+#_(defn bfs
   "breadth-first search"
   [start]
   (loop [frontier [{:loc start :path [start]}]]
@@ -291,10 +240,11 @@
   )
 
 ;; TODO start should initialize the frontier rather than initializing in loop
-(defn bfs2
-  "breadth-first search"
+(defn search-maze
+  "type of search is determined by type of frontier passed in,
+    which may be Stack, Fifo, or PriorityQueue"
   [start]
-  (loop [frontier (bfs-start)]
+  (loop [frontier start]
     (if (not (deserted? frontier))
       (let [working-node (get-next frontier)
             {:keys [loc path]} working-node]
@@ -331,7 +281,7 @@
         (println ln))
       (println "No path was found"))))
 
-(defn start-bfs-search
+#_(defn start-bfs-search
    "start a new bfs search; print path overlaid result if doprint is true"
   ([]
    (start-bfs-search true))
@@ -347,23 +297,25 @@
          (print-maze-params))
        (println "No path was found")))))
 
-(defn start-bfs-search2
-  "start a new bfs search; print path overlaid result if doprint is true"
+(defn start-search
+  "start a new search; print path overlaid result if doprint is true"
   ([]
-   (start-bfs-search2 true))
+   (start-search true))
   ([doprint]
    (reset! visited* #{})
-   (let [{:keys [found path]} (bfs2 @start*)]
-     (if found
-       (do
-         (if doprint
-           (doseq [ln (overlay-path (drop-last 1 path))]
-             (println ln))
-           (println "Path length: " (count path)))
-         (print-maze-params))
-       (println "No path was found")))))
+   ;; TODO fix this to initialize for other types of searches
+   (let [start-node (bfs-start)]
+     (let [{:keys [found path]} (search-maze start-node)]
+       (if found
+         (do
+           (if doprint
+             (doseq [ln (overlay-path (drop-last 1 path))]
+               (println ln))
+             (println "Path length: " (count path)))
+           (print-maze-params))
+         (println "No path was found"))))))
 
-(defn start-dfs-search
+#_(defn start-dfs-search
   "start a new dfs search"
   []
   (reset! visited* #{})
@@ -376,8 +328,10 @@
 (defn new-maze-problem
   [size sparsity]
   (make-full-maze size sparsity)
-  (start-bfs-search)
-  (start-dfs-search))
+  (start-search)
+  "Done with problem"
+  #_(start-bfs-search)
+  #_(start-dfs-search))
 
 (defn -main
   "I don't do a whole lot ... yet."
