@@ -75,23 +75,26 @@
   (get-next [this] "get next node")
   (remainder [this] "remainder after dropping the next node")
   (add-nodes [this vec-of-nodes] "add nodes in vector and return new frontier")
+  (deserted? [this] "Is the frontie empty?")
   )
 
-(deftype Bfs [nodes])
+(deftype Fifo [nodes])
 
 (extend-protocol Frontier
-  Bfs
+  Fifo
   (get-next [this]
     (nth (.nodes this) 0))
   (remainder [this]
-             (->Bfs (subvec (.nodes this) 1)))
+    (->Fifo (subvec (.nodes this) 1)))
   (add-nodes [this v-of-nodes]
-             (->Bfs (vec (into (.nodes (remainder this)) v-of-nodes)))))
+    (->Fifo (vec (into (.nodes (remainder this)) v-of-nodes))))
+  (deserted? [this]
+             (empty? (.nodes this))))
 
 (defn bfs-start
   "return initial frontier for breadth first search"
   []
-  (->Bfs (init-frontier)))
+  (->Fifo (init-frontier)))
 
 (defn check-coord
   [loc limit]
@@ -287,6 +290,27 @@
       {:found false}))
   )
 
+;; TODO start should initialize the frontier rather than initializing in loop
+(defn bfs2
+  "breadth-first search"
+  [start]
+  (loop [frontier (bfs-start)]
+    (if (not (deserted? frontier))
+      (let [working-node (get-next frontier)
+            {:keys [loc path]} working-node]
+        (if (not (visited? loc))
+          (do (swap! visited* conj loc)
+              (cond
+                (nil? loc) {:found false}
+                (at-goal? loc) {:found true :path path}
+                :else (let [succ (successors loc)
+                            unvisited (filter #(not (visited? %)) succ)
+                            nodes (mapv #(loc->node % path) unvisited)
+                            new-frontier (add-nodes frontier nodes)]
+                        (recur new-frontier))))
+          (recur (remainder frontier))))
+      {:found false})))
+
 (defn overlay-path
   "print maze with search path overlay"
   [path]
@@ -316,6 +340,22 @@
    (let [{:keys [found path]} (bfs @start*)]
      (if found
        (do 
+         (if doprint
+           (doseq [ln (overlay-path (drop-last 1 path))]
+             (println ln))
+           (println "Path length: " (count path)))
+         (print-maze-params))
+       (println "No path was found")))))
+
+(defn start-bfs-search2
+  "start a new bfs search; print path overlaid result if doprint is true"
+  ([]
+   (start-bfs-search2 true))
+  ([doprint]
+   (reset! visited* #{})
+   (let [{:keys [found path]} (bfs2 @start*)]
+     (if found
+       (do
          (if doprint
            (doseq [ln (overlay-path (drop-last 1 path))]
              (println ln))
