@@ -1,4 +1,5 @@
 (ns maze.core
+  (:require [clojure.data.priority-map :as pm])
   (:gen-class))
 
 (def DEBUG 0)
