@@ -34,10 +34,18 @@
   [{:loc [1 2] :path [[0 1]]}
    {:loc [2 3] :path [[0 1] [1 2]]}])
 
+;; The Frontier protocol expects this to be a type containing a sequence of nodes
+;; for use by the search algorithm
+;; Three concrete types are implemented: a Fifo, a Stack, and a Priority queue
+;; A node is a map containing a :loc, a :path to that :loc, and optionally
+;; a :heuristic for use by the A* algo
+
 (defprotocol Frontier
   "protocol for handling various frontier types"
+  (countf [this] "return count of node list")
   (get-next [this] "get next node")
-  (remainder [this] "remainder after dropping the next node")
+  (raw-remainder [this] "return the underlying remainder node sequence without converting to type")
+  (remainder [this] "remainder (as type) after dropping the next node")
   (add-nodes [this vec-of-nodes] "add nodes in vector and return new frontier")
   (deserted? [this] "Is the frontie empty?")
   )
@@ -46,29 +54,37 @@
 
 (extend-protocol Frontier
   Fifo
+  (countf [this]
+    (count (.nodes this)))
   (get-next [this]
     (nth (.nodes this) 0))
+  (raw-remainder [this]
+    (subvec (.nodes this) 1))
   (remainder [this]
-    (->Fifo (subvec (.nodes this) 1)))
+    (->Fifo (raw-remainder this)))
   (add-nodes [this v-of-nodes]
-    (->Fifo (vec (into (.nodes (remainder this)) v-of-nodes))))
+    (->Fifo (vec (into (raw-remainder this) v-of-nodes))))
   (deserted? [this]
-             (empty? (.nodes this))))
+    (empty? (.nodes this))))
 
 ;; TODO ------------------------------------
 (deftype StackD [nodes])
 
 (extend-protocol Frontier
   StackD
+  (countf [this] (count (.nodes this)))
   (get-next [this] (peek (.nodes this)))
+  (raw-remainder [this]
+    (pop (.nodes this)))
   (remainder [this]
-             (->StackD (pop (.nodes this))))
+    (->StackD (raw-remainder this)))
   (add-nodes [this v-of-nodes]
-             (->StackD (vec (into (.nodes (remainder this)) v-of-nodes))))
+    (->StackD (vec (into (.nodes (remainder this)) v-of-nodes))))
   (deserted? [this]
     (empty? (.nodes this))))
 
 
+;; https://github.com/clojure/data.priority-map/
 (deftype PriQ [nodes])
 
 ;; -----------------------------------------
@@ -208,59 +224,13 @@
   [loc path]
   {:loc loc :path (conj path loc)})
 
-#_(defn dfs
-  "depth-first search"
-  [start]
-  (loop [frontier [{:loc start :path [start]}]]
-    #_(println "\nvisited " @visited*)
-    #_(println "frontier " frontier)
-    (if (not (empty? frontier))
-      (let [working-node (peek frontier)
-            {:keys [loc path]} working-node]
-        #_(println "working node" working-node)
-        #_(println "loc path " loc " " path)
-        (if (not (visited? loc))
-          (do (swap! visited* conj loc)
-              (cond
-                (nil? loc) {:found false}
-                (at-goal? loc) {:found true :path path}
-                :else (let [succ (successors loc)
-                            #_(println "succ " succ)
-                            unvisited (filter #(not (visited? %)) succ)
-                            nodes (mapv #(loc->node % path) unvisited)
-                            #_(println "nodes " nodes)
-                            new-frontier (vec (into (pop frontier) nodes))]
-                        (recur new-frontier))))
-          (recur (pop frontier))))
-      {:found false})))
-
-#_(defn bfs
-  "breadth-first search"
-  [start]
-  (loop [frontier [{:loc start :path [start]}]]
-    (if (not (empty? frontier))
-      (let [working-node (first frontier)
-            {:keys [loc path]} working-node]
-        (if (not (visited? loc))
-          (do (swap! visited* conj loc)
-            (cond
-              (nil? loc) {:found false}
-              (at-goal? loc) {:found true :path path}
-              :else (let [succ (successors loc)
-                          unvisited (filter #(not (visited? %)) succ)
-                          nodes (mapv #(loc->node % path) unvisited)
-                          new-frontier (vec (into (subvec frontier 1) nodes))]
-                      (recur new-frontier))))
-          (recur (subvec frontier 1))))
-      {:found false}))
-  )
-
 ;; TODO start should initialize the frontier rather than initializing in loop
 (defn search-maze
   "type of search is determined by type of frontier passed in,
     which may be Stack, Fifo, or PriorityQueue"
   [start]
   (loop [frontier start]
+    #_(println "Frontier length: " (countf frontier))
     (if (not (deserted? frontier))
       (let [working-node (get-next frontier)
             {:keys [loc path]} working-node]
@@ -287,32 +257,6 @@
         indexed-path (partition 2 (interleave index reduced-path))]
     (reduce #(update-maze %1 (second %2) (str (first %2))) maze indexed-path)))
 
-#_(defn start-search
-  "start a new search"
-  []
-  (reset! visited* #{})
-  (let [{:keys [found path]} (search-at @start* [])]
-    (if found
-      (doseq [ln (overlay-path path)]
-        (println ln))
-      (println "No path was found"))))
-
-#_(defn start-bfs-search
-   "start a new bfs search; print path overlaid result if doprint is true"
-  ([]
-   (start-bfs-search true))
-  ([doprint]
-   (reset! visited* #{})
-   (let [{:keys [found path]} (bfs @start*)]
-     (if found
-       (do 
-         (if doprint
-           (doseq [ln (overlay-path (drop-last 1 path))]
-             (println ln))
-           (println "Path length: " (count path)))
-         (print-maze-params))
-       (println "No path was found")))))
-
 (defn start-search
   "start a new search; print path overlaid result if doprint is true"
   ([]
@@ -331,16 +275,6 @@
              (println "Path length: " (count path)))
            (print-maze-params))
          (println "No path was found"))))))
-
-#_(defn start-dfs-search
-  "start a new dfs search"
-  []
-  (reset! visited* #{})
-  (let [{:keys [found path]} (dfs @start*)]
-    (if found
-      (doseq [ln (overlay-path (drop-last 1 path))]
-        (println ln))
-      (println "No path was found"))))
 
 (defn new-maze-problem
   [size sparsity]
