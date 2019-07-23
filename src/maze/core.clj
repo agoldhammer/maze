@@ -63,7 +63,7 @@
   (remainder [this]
     (->Fifo (raw-remainder this)))
   (add-nodes [this v-of-nodes]
-    (->Fifo (vec (into (raw-remainder this) v-of-nodes))))
+    (->Fifo (into (raw-remainder this) v-of-nodes)))
   (deserted? [this]
     (empty? (.nodes this))))
 
@@ -79,7 +79,7 @@
   (remainder [this]
     (->StackD (raw-remainder this)))
   (add-nodes [this v-of-nodes]
-    (->StackD (vec (into (.nodes (remainder this)) v-of-nodes))))
+    (->StackD (into (raw-remainder this) v-of-nodes)))
   (deserted? [this]
     (empty? (.nodes this))))
 
