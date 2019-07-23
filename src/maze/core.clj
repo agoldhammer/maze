@@ -56,16 +56,32 @@
              (empty? (.nodes this))))
 
 ;; TODO ------------------------------------
-(deftype Stack [nodes])
+(deftype StackD [nodes])
+
+(extend-protocol Frontier
+  StackD
+  (get-next [this] (peek (.nodes this)))
+  (remainder [this]
+             (->StackD (pop (.nodes this))))
+  (add-nodes [this v-of-nodes]
+             (->StackD (vec (into (.nodes (remainder this)) v-of-nodes))))
+  (deserted? [this]
+    (empty? (.nodes this))))
+
 
 (deftype PriQ [nodes])
 
 ;; -----------------------------------------
 
 (defn bfs-start
-  "return initial frontier for breadth first search"
+  "return initial frontier (Fifo) for breadth first search"
   []
   (->Fifo (init-frontier)))
+
+(defn dfs-start
+  "return initial frontier (Stack) for depth first search"
+  []
+  (->StackD (init-frontier)))
 
 (defn check-coord
   [loc limit]
@@ -300,11 +316,12 @@
 (defn start-search
   "start a new search; print path overlaid result if doprint is true"
   ([]
-   (start-search true))
-  ([doprint]
+   (start-search :bfs true))
+  ([type-of-search doprint]
    (reset! visited* #{})
    ;; TODO fix this to initialize for other types of searches
-   (let [start-node (bfs-start)]
+   (let [init-fn (if (= type-of-search :bfs) bfs-start dfs-start)
+         start-node (init-fn)]
      (let [{:keys [found path]} (search-maze start-node)]
        (if found
          (do
