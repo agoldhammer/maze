@@ -1,5 +1,5 @@
 (ns maze.core
-  (:require [clojure.data.priority-map :as pm])
+  (:import [java.util.concurrent PriorityBlockingQueue])
   (:gen-class))
 
 (def DEBUG 0)
@@ -34,6 +34,39 @@
 (def dummy-vec-of-nodes
   [{:loc [1 2] :path [[0 1]]}
    {:loc [2 3] :path [[0 1] [1 2]]}])
+
+(def dummy-vec-with-heuristics
+  [[[1 2] [[0 1] 1 1] 1 5]
+   [[2 3] [[0 1] [1 2]] 1 2]
+   [[3 4] [[0 1] [1 2]] 1 1]
+   [[4 5] [[0 1] [1 2]] 1 27]
+   [[5 6] [[0 1] [1 2]] 1 1]
+   [[6 7] [[0 1] [1 2]] 1 3]])
+
+(def node-vector (mapv #(apply ->Node %) dummy-vec-with-heuristics))
+
+(defn priority-queue
+  ([]
+   (PriorityBlockingQueue.))
+  ([^java.util.Collection xs]
+   (PriorityBlockingQueue. xs))
+  ([init-size ordering]
+   (PriorityBlockingQueue. init-size (comparator ordering))))
+
+;; TODO is it worth making a seprate type for a node?
+
+(deftype Node [loc path cost heuristic])
+
+(defn node-total-cost [^Node node]
+  (+ (.cost node) (.heuristic node)))
+
+(defn node-comp [^Node n1 ^Node n2]
+  (< (node-total-cost n1) (node-total-cost n2)))
+
+;; TODO For testing only remove later ****
+(def pq (priority-queue 100 node-comp))
+
+
 
 ;; The Frontier protocol expects this to be a type containing a sequence of nodes
 ;; for use by the search algorithm
