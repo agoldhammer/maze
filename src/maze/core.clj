@@ -22,6 +22,7 @@
 (def size* (atom 0))
 (def sparsity* (atom 1))
 (def visited* (atom #{}))
+(def a-visited* (ref (hash-map)))
 
 (defn init-frontier
   "return a frontier with 1 node: loc start and path at start"
@@ -43,8 +44,6 @@
    [[5 6] [[0 1] [1 2]] 1 1]
    [[6 7] [[0 1] [1 2]] 1 3]])
 
-(def node-vector (mapv #(apply ->Node %) dummy-vec-with-heuristics))
-
 (defn priority-queue
   ([]
    (PriorityBlockingQueue.))
@@ -62,6 +61,14 @@
 
 (defn node-comp [^Node n1 ^Node n2]
   (< (node-total-cost n1) (node-total-cost n2)))
+
+(defn calc-heuristic
+  "given two locs, loca and locb, calculate the Manhattan distance"
+  [loca locb]
+  (let [[xdist ydist] (mapv - loca locb)]
+    (+ (Math/abs xdist) (Math/abs ydist))))
+
+(def node-vector (mapv #(apply ->Node %) dummy-vec-with-heuristics))
 
 ;; TODO For testing only remove later ****
 (def pq (priority-queue 100 node-comp))
@@ -81,7 +88,7 @@
   (raw-remainder [this] "return the underlying remainder node sequence without converting to type")
   (remainder [this] "remainder (as type) after dropping the next node")
   (add-nodes [this vec-of-nodes] "add nodes in vector and return new frontier")
-  (deserted? [this] "Is the frontie empty?")
+  (deserted? [this] "Is the frontier empty?")
   )
 
 (deftype Fifo [nodes])
@@ -118,8 +125,23 @@
     (empty? (.nodes this))))
 
 
-;; https://github.com/clojure/data.priority-map/
-(deftype PriQ [nodes])
+(deftype PriQ [pq])
+
+(extend-protocol Frontier
+  PriQ
+  (countf [this]
+    (.size (.pq this)))
+  (add-nodes [this v-of-nodes]
+             (doseq [v v-of-nodes]
+               (.add (.pq this) v)))
+  ;; note!! remainder is not used, get next strips head of queue
+  (get-next [this]
+    (.take (.pq this)))
+  (remainder [this]
+    (.take (.pq this))
+    this)
+  (deserted? [this]
+    (nil? (.peek (.pq this)))))
 
 ;; -----------------------------------------
 
@@ -132,6 +154,16 @@
   "return initial frontier (Stack) for depth first search"
   []
   (->StackD (init-frontier)))
+
+(defn astar-start
+  "return initial frontier (PriQ) for astar"
+  []
+  (let [{:keys [loc path]} ((init-frontier) 0)
+        _ (println loc path)]
+    (let [queue (priority-queue 100 node-comp)
+          pq (->PriQ queue)]
+      (add-nodes pq [(->Node loc path 0 (calc-heuristic loc @goal*))])
+      pq)))
 
 (defn check-coord
   [loc limit]
@@ -281,6 +313,61 @@
           (recur (remainder frontier))))
       {:found false})))
 
+
+(defn filter-function
+  "pass a node if loc is unvisited or if its total-cost is less than old cost"
+  [node new-cost]
+  (let [loc (.loc node)
+        cost (node-total-cost node)
+        old-cost (dosync (alter a-visited* get loc nil))]
+    (or (nil? old-cost)
+        (< cost old-cost))))
+
+(defn loc->Node
+  "from loc, path, goal make N Node"
+  [loc path goal cost]
+  (let [node (loc->node loc path)
+        heuristic (calc-heuristic loc goal)]
+    (->Node (:loc node) (:path node) cost heuristic)))
+
+(defn unvisited-cheaper-successors
+  "find unvisited cheaper successors;
+   returns as seq of Nodes"
+  [loc path goal cost]
+  (let [succ (successors loc)
+        nodes (map #(loc->Node %1 path goal cost) succ)]
+    (filter #(filter-function % cost) nodes)))
+
+(defn astar-search-maze
+  "start-frontier is a priority queue of Node types"
+  [^:dynamic start-frontier goal]
+  (loop [frontier start-frontier]
+    (println "Frontier length: " (countf frontier))
+    (if (deserted? frontier)
+      {:found false}
+      (let [working-node (get-next frontier)
+            loc (.loc working-node)
+            path (.path working-node)
+            current-cost (.cost working-node)
+            old-cost (dosync (alter  a-visited* get loc nil))]
+        (if (at-goal? loc)
+          {:found true :path path}
+          ; else
+        
+          (let [should-expand? (or (nil? old-cost) ; working node has not yet been visited
+                                   (< current-cost old-cost))] ; cheaper route found
+            ; so add it to a-visited with current cost and recur
+            (when should-expand?
+              (do 
+                (dosync (alter  a-visited* assoc loc current-cost))
+                (println "in should expand" @a-visited* loc current-cost)
+                (let [new-cost (inc current-cost)
+                      unvisited (unvisited-cheaper-successors loc path goal new-cost)]
+                  (println "unvisited" (count unvisited) unvisited)
+                  (add-nodes frontier unvisited))))
+            (println "frontier" frontier)
+            (recur frontier)))))))
+
 (defn overlay-path
   "print maze with search path overlay"
   [path]
@@ -303,10 +390,28 @@
      (let [{:keys [found path]} (search-maze start-node)]
        (if found
          (do
-           (if doprint
+           (when doprint
              (doseq [ln (overlay-path (drop-last 1 path))]
-               (println ln))
-             (println "Path length: " (count path)))
+               (println ln)))
+           (println "Found: Path length: " (count path))
+           (print-maze-params))
+         (println "No path was found"))))))
+
+(defn start-astar-search
+  "start a new astar search; print path overlaid result if doprint is true"
+  ([]
+   (start-astar-search true))
+  ([doprint]
+   (dosync (ref-set a-visited* (hash-map)))
+   ;; TODO fix this TO INIT properly
+   (let [start-node (astar-start)]
+     (let [{:keys [found path]} (astar-search-maze start-node @goal*)]
+       (if found
+         (do
+           (when doprint
+             (doseq [ln (overlay-path (drop-last 1 path))]
+               (println ln)))
+           (println "Found: Path length: " (count path))
            (print-maze-params))
          (println "No path was found"))))))
 
@@ -322,3 +427,8 @@
   "I don't do a whole lot ... yet."
   [& args]
   (println "Hello, World!"))
+
+(comment
+  (make-full-maze 50 30)
+  (start-search) ; bfs
+  (start-search :dfs true)) ; dfs
