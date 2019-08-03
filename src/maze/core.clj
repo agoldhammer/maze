@@ -316,7 +316,7 @@
 
 (defn filter-function
   "pass a node if loc is unvisited or if its total-cost is less than old cost"
-  [node new-cost]
+  [node]
   (let [loc (.loc node)
         cost (node-total-cost node)
         old-cost (dosync (alter a-visited* get loc nil))]
@@ -327,7 +327,8 @@
   "from loc, path, goal make N Node"
   [loc path goal cost]
   (let [node (loc->node loc path)
-        heuristic (calc-heuristic loc goal)]
+        heuristic (calc-heuristic loc goal)
+        _ (println "loc->Node, cost, heuristic" cost heuristic)]
     (->Node (:loc node) (:path node) cost heuristic)))
 
 (defn unvisited-cheaper-successors
@@ -336,7 +337,7 @@
   [loc path goal cost]
   (let [succ (successors loc)
         nodes (map #(loc->Node %1 path goal cost) succ)]
-    (filter #(filter-function % cost) nodes)))
+    (filter filter-function nodes)))
 
 (defn astar-search-maze
   "start-frontier is a priority queue of Node types"
@@ -347,25 +348,26 @@
       {:found false}
       (let [working-node (get-next frontier)
             loc (.loc working-node)
-            path (.path working-node)
-            current-cost (.cost working-node)
-            old-cost (dosync (alter  a-visited* get loc nil))]
+            path (.path working-node)]
         (if (at-goal? loc)
           {:found true :path path}
           ; else
         
-          (let [should-expand? (or (nil? old-cost) ; working node has not yet been visited
+          (let [current-cost (node-total-cost working-node)
+                old-cost (dosync (alter a-visited* get loc nil))
+                _ (println "current-cost, old-cost" current-cost old-cost)
+                should-expand? (or (nil? old-cost) ; working node has not yet been visited
                                    (< current-cost old-cost))] ; cheaper route found
             ; so add it to a-visited with current cost and recur
             (when should-expand?
               (do 
                 (dosync (alter  a-visited* assoc loc current-cost))
                 (println "in should expand" @a-visited* loc current-cost)
-                (let [new-cost (inc current-cost)
+                (let [new-cost (inc (.cost working-node))
                       unvisited (unvisited-cheaper-successors loc path goal new-cost)]
-                  (println "unvisited" (count unvisited) unvisited)
+                  (println "unvisited" (count unvisited))
                   (add-nodes frontier unvisited))))
-            (println "frontier" frontier)
+            #_(println "frontier" frontier)
             (recur frontier)))))))
 
 (defn overlay-path
