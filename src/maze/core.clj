@@ -54,10 +54,10 @@
 
 ;; TODO is it worth making a seprate type for a node?
 
-(deftype Node [loc path cost heuristic])
+(deftype Node [loc path g h])
 
 (defn node-total-cost [^Node node]
-  (+ (.cost node) (.heuristic node)))
+  (+ (.g node) (.h node)))
 
 (defn node-comp [^Node n1 ^Node n2]
   (< (node-total-cost n1) (node-total-cost n2)))
@@ -160,7 +160,7 @@
   []
   (let [{:keys [loc path]} ((init-frontier) 0)
         _ (println loc path)]
-    (let [queue (priority-queue 100 node-comp)
+    (let [queue (priority-queue 1000 node-comp)
           pq (->PriQ queue)]
       (add-nodes pq [(->Node loc path 0 (calc-heuristic loc @goal*))])
       pq)))
@@ -318,32 +318,31 @@
   "pass a node if loc is unvisited or if its total-cost is less than old cost"
   [node]
   (let [loc (.loc node)
-        cost (node-total-cost node)
-        old-cost (dosync (alter a-visited* get loc nil))]
-    (or (nil? old-cost)
-        (< cost old-cost))))
+        new-f (node-total-cost node)
+        old-f (get @a-visited* loc)]
+    (or (nil? old-f)
+        (< new-f old-f))))
 
 (defn loc->Node
   "from loc, path, goal make N Node"
-  [loc path goal cost]
-  (let [node (loc->node loc path)
-        heuristic (calc-heuristic loc goal)
-        _ (println "loc->Node, cost, heuristic" cost heuristic)]
-    (->Node (:loc node) (:path node) cost heuristic)))
+  [loc path goal g-of-new-node]
+  (let [heuristic (calc-heuristic loc goal)
+        new-node (loc->node loc path)]
+    (->Node (:loc new-node) (:path new-node) g-of-new-node heuristic)))
 
 (defn unvisited-cheaper-successors
   "find unvisited cheaper successors;
    returns as seq of Nodes"
-  [loc path goal cost]
+  [loc path goal g-of-new-node]
   (let [succ (successors loc)
-        nodes (map #(loc->Node %1 path goal cost) succ)]
+        nodes (map #(loc->Node %1 path goal g-of-new-node) succ)]
     (filter filter-function nodes)))
 
 (defn astar-search-maze
   "start-frontier is a priority queue of Node types"
   [^:dynamic start-frontier goal]
   (loop [frontier start-frontier]
-    (println "Frontier length: " (countf frontier))
+    #_(println "Frontier length: " (countf frontier))
     (if (deserted? frontier)
       {:found false}
       (let [working-node (get-next frontier)
@@ -353,19 +352,21 @@
           {:found true :path path}
           ; else
         
-          (let [current-cost (node-total-cost working-node)
-                old-cost (dosync (alter a-visited* get loc nil))
-                _ (println "current-cost, old-cost" current-cost old-cost)
-                should-expand? (or (nil? old-cost) ; working node has not yet been visited
-                                   (< current-cost old-cost))] ; cheaper route found
+          (let [current-f (node-total-cost working-node)
+                old-f (get @a-visited* loc nil)
+               ;; _ (println "Working node"  (.loc working-node) (.g working-node)
+                ;;           (.h working-node))
+                ;; _ (println "current-cost, old-cost" current-cost old-cost)
+                should-expand? (or (nil? old-f) ; working node has not yet been visited
+                                   (< current-f old-f))] ; cheaper route found
             ; so add it to a-visited with current cost and recur
             (when should-expand?
               (do 
-                (dosync (alter  a-visited* assoc loc current-cost))
-                (println "in should expand" @a-visited* loc current-cost)
-                (let [new-cost (inc (.cost working-node))
-                      unvisited (unvisited-cheaper-successors loc path goal new-cost)]
-                  (println "unvisited" (count unvisited))
+                (dosync (alter  a-visited* assoc loc current-f))
+                #_(println "in should expand" @a-visited* loc current-f)
+                (let [new-g (inc (.g working-node))
+                      unvisited (unvisited-cheaper-successors loc path goal new-g)]
+                  #_(println "unvisited" (count unvisited))
                   (add-nodes frontier unvisited))))
             #_(println "frontier" frontier)
             (recur frontier)))))))
