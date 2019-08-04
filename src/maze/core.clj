@@ -22,7 +22,7 @@
 (def size* (atom 0))
 (def sparsity* (atom 1))
 (def visited* (atom #{}))
-(def a-visited* (ref (hash-map)))
+(def a-visited* (atom (hash-map)))
 
 (defn init-frontier
   "return a frontier with 1 node: loc start and path at start"
@@ -158,8 +158,7 @@
 (defn astar-start
   "return initial frontier (PriQ) for astar"
   []
-  (let [{:keys [loc path]} ((init-frontier) 0)
-        _ (println loc path)]
+  (let [{:keys [loc path]} ((init-frontier) 0)]
     (let [queue (priority-queue 1000 node-comp)
           pq (->PriQ queue)]
       (add-nodes pq [(->Node loc path 0 (calc-heuristic loc @goal*))])
@@ -362,12 +361,12 @@
             ; so add it to a-visited with current cost and recur
             (when should-expand?
               (do 
-                (dosync (alter  a-visited* assoc loc current-f))
+                (swap!  a-visited* assoc loc current-f))
                 #_(println "in should expand" @a-visited* loc current-f)
                 (let [new-g (inc (.g working-node))
                       unvisited (unvisited-cheaper-successors loc path goal new-g)]
                   #_(println "unvisited" (count unvisited))
-                  (add-nodes frontier unvisited))))
+                  (add-nodes frontier unvisited)))
             #_(println "frontier" frontier)
             (recur frontier)))))))
 
@@ -405,8 +404,7 @@
   ([]
    (start-astar-search true))
   ([doprint]
-   (dosync (ref-set a-visited* (hash-map)))
-   ;; TODO fix this TO INIT properly
+   (swap! a-visited* (hash-map))
    (let [start-node (astar-start)]
      (let [{:keys [found path]} (astar-search-maze start-node @goal*)]
        (if found
