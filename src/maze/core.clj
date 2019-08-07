@@ -52,9 +52,9 @@
   ([init-size ordering]
    (PriorityBlockingQueue. init-size (comparator ordering))))
 
-;; TODO is it worth making a seprate type for a node?
-
-(deftype Node [loc path g h])
+;; Node type has field loc (location), parent, g (cost to node), and
+;; h (heuristic); total cost f = g + h
+(deftype Node [loc parent g h])
 
 (defn node-total-cost [^Node node]
   (+ (.g node) (.h node)))
@@ -158,11 +158,11 @@
 (defn astar-start
   "return initial frontier (PriQ) for astar"
   []
-  (let [{:keys [loc path]} ((init-frontier) 0)]
-    (let [queue (priority-queue 1000 node-comp)
-          pq (->PriQ queue)]
-      (add-nodes pq [(->Node loc path 0 (calc-heuristic loc @goal*))])
-      pq)))
+  (let [queue (priority-queue 1000 node-comp)
+        pq (->PriQ queue)
+        start @start*]
+    (add-nodes pq [(->Node start nil 0 (calc-heuristic start @goal*))])
+    pq))
 
 (defn check-coord
   [loc limit]
@@ -318,23 +318,22 @@
   [node]
   (let [loc (.loc node)
         new-f (node-total-cost node)
-        old-f (get @a-visited* loc)]
+        old-f (:cost (get @a-visited* loc))]
     (or (nil? old-f)
         (< new-f old-f))))
 
 (defn loc->Node
   "from loc, path, goal make N Node"
-  [loc path goal g-of-new-node]
-  (let [heuristic (calc-heuristic loc goal)
-        new-node (loc->node loc path)]
-    (->Node (:loc new-node) (:path new-node) g-of-new-node heuristic)))
+  [loc parent goal g-of-new-node]
+  (let [heuristic (calc-heuristic loc goal)]
+    (->Node loc parent g-of-new-node heuristic)))
 
 (defn unvisited-cheaper-successors
   "find unvisited cheaper successors;
    returns as seq of Nodes"
-  [loc path goal g-of-new-node]
+  [loc goal g-of-new-node]
   (let [succ (successors loc)
-        nodes (map #(loc->Node %1 path goal g-of-new-node) succ)]
+        nodes (map #(loc->Node %1 loc goal g-of-new-node) succ)]
     (filter filter-function nodes)))
 
 (defn astar-search-maze
@@ -346,14 +345,16 @@
       {:found false}
       (let [working-node (get-next frontier)
             loc (.loc working-node)
-            path (.path working-node)]
+            parent (.parent working-node)]
         (if (at-goal? loc)
-          {:found true :path path}
+          (do
+            (swap! a-visited* assoc loc {:cost nil :parent parent})
+            {:found true})
           ; else
-        
+          
           (let [current-f (node-total-cost working-node)
-                old-f (get @a-visited* loc nil)
-               ;; _ (println "Working node"  (.loc working-node) (.g working-node)
+                old-f (:cost (get @a-visited* loc nil))
+                ;; _ (println "Working node"  (.loc working-node) (.g working-node)
                 ;;           (.h working-node))
                 ;; _ (println "current-cost, old-cost" current-cost old-cost)
                 should-expand? (or (nil? old-f) ; working node has not yet been visited
@@ -361,12 +362,13 @@
             ; so add it to a-visited with current cost and recur
             (when should-expand?
               (do 
-                (swap!  a-visited* assoc loc current-f))
-                #_(println "in should expand" @a-visited* loc current-f)
-                (let [new-g (inc (.g working-node))
-                      unvisited (unvisited-cheaper-successors loc path goal new-g)]
-                  #_(println "unvisited" (count unvisited))
-                  (add-nodes frontier unvisited)))
+                (swap!  a-visited* assoc loc {:cost current-f
+                                              :parent parent}))
+              #_(println "in should expand" @a-visited* loc current-f)
+              (let [new-g (inc (.g working-node))
+                    unvisited (unvisited-cheaper-successors loc goal new-g)]
+                #_(println "unvisited" (count unvisited))
+                (add-nodes frontier unvisited)))
             #_(println "frontier" frontier)
             (recur frontier)))))))
 
@@ -379,6 +381,33 @@
         index (map #(mod % 10) (range (count reduced-path)))
         indexed-path (partition 2 (interleave index reduced-path))]
     (reduce #(update-maze %1 (second %2) (str (first %2))) maze indexed-path)))
+
+(defn extract-path
+  "extract path from a-visited; includes start and goal points
+   extracted path is in reverse order, from goal to start"
+  []
+  ;; drop the starting node
+  (let [goal @goal*
+        maze @maze*
+        a-visited @a-visited*
+        last (:parent (get a-visited goal))
+        ;; index (map #(mod % 10) (range (count reduced-path)))
+        ;; indexed-path (partition 2 (interleave index reduced-path))
+        ]
+    (loop [path [@goal*]]
+      (let [loc (:parent (get a-visited (peek path)))]
+        (if (nil? loc)
+          path
+          (do 
+            (recur (conj path loc))))))))
+
+(defn a-overlay-path
+  "overlay the extracted path on the maze"
+  [path]
+  ; drop the start and goal points and reverse the path
+  (let [reduced-path (drop 1 (rseq (subvec path 1)))
+        indexed-path (partition 2 (interleave reduced-path (cycle (range 10))))]
+    (reduce #(update-maze %1 (first %2) (str (second %2))) @maze* indexed-path )))
 
 (defn start-search
   "start a new search; print path overlaid result if doprint is true"
@@ -409,11 +438,12 @@
      (let [{:keys [found path]} (astar-search-maze start-node @goal*)]
        (if found
          (do
-           (when doprint
-             (doseq [ln (overlay-path (drop-last 1 path))]
-               (println ln)))
-           (println "Found: Path length: " (count path))
-           (print-maze-params))
+           (let [path (extract-path)]
+             (when doprint
+               (doseq [ln (a-overlay-path path)]
+                 (println ln)))
+             (println "Found: Path length: " (count path))
+             (print-maze-params)))
          (println "No path was found"))))))
 
 (defn new-maze-problem
