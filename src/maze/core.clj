@@ -387,13 +387,7 @@
    extracted path is in reverse order, from goal to start"
   []
   ;; drop the starting node
-  (let [goal @goal*
-        maze @maze*
-        a-visited @a-visited*
-        last (:parent (get a-visited goal))
-        ;; index (map #(mod % 10) (range (count reduced-path)))
-        ;; indexed-path (partition 2 (interleave index reduced-path))
-        ]
+  (let [a-visited @a-visited*]
     (loop [path [@goal*]]
       (let [loc (:parent (get a-visited (peek path)))]
         (if (nil? loc)
@@ -435,7 +429,7 @@
   ([doprint]
    (swap! a-visited* (hash-map))
    (let [start-node (astar-start)]
-     (let [{:keys [found path]} (astar-search-maze start-node @goal*)]
+     (let [{:keys [found]} (astar-search-maze start-node @goal*)]
        (if found
          (do
            (let [path (extract-path)]
