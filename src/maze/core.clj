@@ -448,6 +448,13 @@
   #_(start-bfs-search)
   #_(start-dfs-search))
 
+(defn save-maze
+  []
+  (let [fname "maze.maz"]
+    (spit fname (prn-str "Start: " @start*))
+    (spit fname (prn-str "Goal: " @goal*) :append true)
+    (spit fname (prn-str "Size: " @size*) :append true)))
+
 (defn -main
   "I don't do a whole lot ... yet."
   [& args]
