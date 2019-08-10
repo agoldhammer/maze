@@ -22,7 +22,7 @@
 (def size* (atom 0))
 (def sparsity* (atom 1))
 (def visited* (atom #{}))
-(def a-visited* (atom (hash-map)))
+(def a-visited* (ref (hash-map)))
 
 (defn init-frontier
   "return a frontier with 1 node: loc start and path at start"
@@ -318,7 +318,7 @@
   [node]
   (let [loc (.loc node)
         new-f (node-total-cost node)
-        old-f (:cost (get @a-visited* loc))]
+        old-f (dosync (:cost (get (ensure a-visited*) loc)))]
     (or (nil? old-f)
         (< new-f old-f))))
 
@@ -342,34 +342,34 @@
   (loop [frontier start-frontier]
     #_(println "Frontier length: " (countf frontier))
     (if (deserted? frontier)
-      {:found false}
+      {:found false};
+      ; else
       (let [working-node (get-next frontier)
             loc (.loc working-node)
             parent (.parent working-node)]
         (if (at-goal? loc)
-          (do
-            (swap! a-visited* assoc loc {:cost nil :parent parent})
-            {:found true})
-          ; else
-          
-          (let [current-f (node-total-cost working-node)
-                old-f (:cost (get @a-visited* loc nil))
-                ;; _ (println "Working node"  (.loc working-node) (.g working-node)
-                ;;           (.h working-node))
-                ;; _ (println "current-cost, old-cost" current-cost old-cost)
-                should-expand? (or (nil? old-f) ; working node has not yet been visited
-                                   (< current-f old-f))] ; cheaper route found
-            ; so add it to a-visited with current cost and recur
+          (dosync
+           (alter a-visited* assoc loc {:cost nil :parent parent})
+           {:found true})
+          ; else, want to expand nod if new or cheaper than on prev visit to this loc
+          (let [should-expand? (dosync
+                                (let [current-f (node-total-cost working-node)
+                                      old-f (:cost (get (ensure a-visited*) loc nil))
+                                      new-or-cheaper? (or (nil? old-f)
+                                                          (< current-f old-f))]
+                                  (when new-or-cheaper?
+                                    (alter a-visited* assoc loc
+                                           {:cost current-f :parent parent}))
+                                  #_(println "new or ch" new-or-cheaper?)
+                                  new-or-cheaper?))]
+            
             (when should-expand?
-              (do 
-                (swap!  a-visited* assoc loc {:cost current-f
-                                              :parent parent}))
-              #_(println "in should expand" @a-visited* loc current-f)
               (let [new-g (inc (.g working-node))
                     unvisited (unvisited-cheaper-successors loc goal new-g)]
                 #_(println "unvisited" (count unvisited))
-                (add-nodes frontier unvisited)))
-            #_(println "frontier" frontier)
+                (add-nodes frontier unvisited))
+              #_(println "frontier" frontier)
+              )
             (recur frontier)))))))
 
 (defn overlay-path
@@ -427,7 +427,7 @@
   ([]
    (start-astar-search true))
   ([doprint]
-   (swap! a-visited* (hash-map))
+   (dosync (ref-set a-visited* (hash-map)))
    (let [start-node (astar-start)]
      (let [{:keys [found]} (astar-search-maze start-node @goal*)]
        (if found
