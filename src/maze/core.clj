@@ -1,4 +1,5 @@
 (ns maze.core
+  (:require [taoensso.nippy :as nippy])
   (:import [java.util.concurrent PriorityBlockingQueue])
   (:gen-class))
 
@@ -448,12 +449,19 @@
   #_(start-bfs-search)
   #_(start-dfs-search))
 
+;; TODO Use Nippy
 (defn save-maze
   []
-  (let [fname "maze.maz"]
-    (spit fname (prn-str "Start: " @start*))
-    (spit fname (prn-str "Goal: " @goal*) :append true)
-    (spit fname (prn-str "Size: " @size*) :append true)))
+  (let [f (clojure.java.io/file "maze.maz")]
+    (nippy/freeze-to-file f {:start @start*
+                             :goal @goal*
+                             :size @size*
+                             :maze @maze*})))
+
+(defn read-maze
+  []
+  (let [f (clojure.java.io/file "maze.maz")]
+    (nippy/thaw-from-file f)))
 
 (defn -main
   "I don't do a whole lot ... yet."
