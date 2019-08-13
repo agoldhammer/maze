@@ -93,9 +93,9 @@
 (declare new-priq)
 
 (defn split-frontier
-  "divide frontier into n sub-frontiers"
+  "divide frontier into n or n+1 sub-frontiers"
   [frontier n]
-  "return required number of subfrontiers of size n or smaller"
+  {:pre [(> n 0)]}
   (let [size (quot (countf frontier) n)]
     (doall 
      (map #(new-priq %1 1000) (partition size (into [] (.toArray (.pq frontier)))))))
