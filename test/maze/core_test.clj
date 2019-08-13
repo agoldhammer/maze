@@ -1,19 +1,37 @@
 (ns maze.core-test
-  (:require [clojure.test :refer :all]
-            [maze.core :refer :all]))
+  (:require [clojure.test :refer [deftest is]]
+            [maze.core :as m :refer :all]))
 
-#_(def sample-node-sequence [{:loc [0 1] :path []}
-                           {:loc [2 3] :path [[0 1]]}
-                           {:loc [3 4] :path [[0 1] [2 3]]}])
 
-(def test-nodes [[[0 1] [] 0 0]
-                 [[1 2] [[0 1]] 1 1]
-                 [[2 3] [[0 1] [1 2]] 1 3]])
+(defn make-dummy-Node
+  "make a dummy node"
+  []
+  (let [x (rand-int 100)
+        y (rand-int 100)
+        g (rand-int 50)
+        h (rand-int 1000)]
+    ;; loc parent g h
+    (apply m/->Node [[x y] [(dec x) y] g h])))
 
-(deftest node-type-test
-  (testing "node deftype"
-    (let [test-Nodes (mapv #(apply ->Node %) test-nodes)
-          results (for [node test-Nodes]
-                    (+ (.cost node) (.heuristic node)))]
-      (println results)
-      (is (= '(0 2 4) results)))))
+(defn make-sequence-of-Nodes
+  [n]
+  (repeatedly n make-dummy-Node))
+
+(defn make-test-pq
+  "make a PriQ for testing"
+  [n]
+  (let [queue (m/priority-queue 1000 m/node-comp)
+        pq (m/->PriQ queue)]
+    (m/add-nodes pq (make-sequence-of-Nodes n))
+    pq))
+
+(deftest test-split-frontier
+  "splitting a frontier should produce PriQs of correct size"
+  (let [size 100
+        parts 4
+        new-frontiers (m/split-frontier (make-test-pq size) parts)]
+    (is (every? #(= maze.core.PriQ %) (map type new-frontiers)))
+    (is (every? #(= 25 %) (map m/countf new-frontiers)))))
+
+
+

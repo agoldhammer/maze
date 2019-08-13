@@ -31,20 +31,6 @@
   (let [start-loc @start*]
     [{:loc start-loc :path [start-loc]}]))
 
-;; TODO
-; this is a dummy for testing, remove later!!
-(def dummy-vec-of-nodes
-  [{:loc [1 2] :path [[0 1]]}
-   {:loc [2 3] :path [[0 1] [1 2]]}])
-
-(def dummy-vec-with-heuristics
-  [[[1 2] [[0 1] 1 1] 1 5]
-   [[2 3] [[0 1] [1 2]] 1 2]
-   [[3 4] [[0 1] [1 2]] 1 1]
-   [[4 5] [[0 1] [1 2]] 1 27]
-   [[5 6] [[0 1] [1 2]] 1 1]
-   [[6 7] [[0 1] [1 2]] 1 3]])
-
 (defn priority-queue
   ([]
    (PriorityBlockingQueue.))
@@ -69,12 +55,7 @@
   (let [[xdist ydist] (mapv - loca locb)]
     (+ (Math/abs xdist) (Math/abs ydist))))
 
-(def node-vector (mapv #(apply ->Node %) dummy-vec-with-heuristics))
-
-;; TODO For testing only remove later ****
 (def pq (priority-queue 100 node-comp))
-
-
 
 ;; The Frontier protocol expects this to be a type containing a sequence of nodes
 ;; for use by the search algorithm
@@ -108,6 +89,17 @@
     (->Fifo (into (raw-remainder this) v-of-nodes)))
   (deserted? [this]
     (empty? (.nodes this))))
+
+(declare new-priq)
+
+(defn split-frontier
+  "divide frontier into n sub-frontiers"
+  [frontier n]
+  "return required number of subfrontiers of size n or smaller"
+  (let [size (quot (countf frontier) n)]
+    (doall 
+     (map #(new-priq %1 1000) (partition size (into [] (.toArray (.pq frontier)))))))
+  )
 
 ;; TODO ------------------------------------
 (deftype StackD [nodes])
@@ -156,14 +148,19 @@
   []
   (->StackD (init-frontier)))
 
+(defn new-priq
+  "make a new priority queue from a vector of Nodes"
+  [vec-of-Nodes size]
+  (let [queue (priority-queue size node-comp)
+        pq (->PriQ queue)]
+    (add-nodes pq vec-of-Nodes)
+    pq))
+
 (defn astar-start
   "return initial frontier (PriQ) for astar"
   []
-  (let [queue (priority-queue 1000 node-comp)
-        pq (->PriQ queue)
-        start @start*]
-    (add-nodes pq [(->Node start nil 0 (calc-heuristic start @goal*))])
-    pq))
+  (let [start @start*]
+    (new-priq [(->Node start nil 0 (calc-heuristic start @goal*))] 1000)))
 
 (defn check-coord
   [loc limit]
@@ -339,7 +336,7 @@
 
 (defn astar-search-maze
   "start-frontier is a priority queue of Node types"
-  [^:dynamic start-frontier goal]
+  [start-frontier goal]
   (loop [frontier start-frontier]
     #_(println "Frontier length: " (countf frontier))
     (if (deserted? frontier)
