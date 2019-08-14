@@ -11,7 +11,7 @@
         g (rand-int 50)
         h (rand-int 1000)]
     ;; loc parent g h
-    (apply m/->Node [[x y] [(dec x) y] g h])))
+    (apply m/->Node [[x y] [(inc x) y] g h])))
 
 (defn make-sequence-of-Nodes
   [n]
@@ -27,11 +27,18 @@
 
 (deftest test-split-frontier
   "splitting a frontier should produce PriQs of correct size"
+  (println "beginning test")
   (let [size 100
         parts 4
         new-frontiers (m/split-frontier (make-test-pq size) parts)]
+    (println "new frontier types" (map type new-frontiers))
     (is (every? #(= maze.core.PriQ %) (map type new-frontiers)))
-    (is (every? #(= 25 %) (map m/countf new-frontiers)))))
+    (is (every? #(= 25 %) (map m/countf new-frontiers))))
+  ;; this should return 9 frontiers, 8 with count 12 and 1 with count 4
+  (let [size 100
+        parts 8
+        new-frontiers (m/split-frontier (make-test-pq size) parts)]
+    (is (every? #(<= % 12) (map m/countf new-frontiers)))))
 
 
 

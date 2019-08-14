@@ -24,6 +24,7 @@
 (def sparsity* (atom 1))
 (def visited* (atom #{}))
 (def a-visited* (ref (hash-map)))
+(def max-frontier-size (agent 0))
 
 (defn init-frontier
   "return a frontier with 1 node: loc start and path at start"
@@ -96,9 +97,11 @@
   "divide frontier into n or n+1 sub-frontiers"
   [frontier n]
   {:pre [(> n 0)]}
-  (let [size (quot (countf frontier) n)]
+  ;; randomize assignment to sub-frontiers by shuffling
+  (let [size (quot (countf frontier) n)
+        vec-of-nodes (shuffle (into [] (.toArray (.pq frontier))))]
     (doall 
-     (map #(new-priq %1 1000) (partition size (into [] (.toArray (.pq frontier)))))))
+     (map #(new-priq %1 1000) (partition size vec-of-nodes))))
   )
 
 ;; TODO ------------------------------------
@@ -232,9 +235,10 @@
 (defn print-maze-params
   "print just maze parameters, not maze itself"
   []
-  (println "Size: " @size* " Sparsity: " @sparsity*)
+  (println "Size:" @size* " Sparsity:" @sparsity*)
   (println "Start:" @start*)
-  (println "Goal:" @goal*))
+  (println "Goal:" @goal*)
+  (println "Max frontier size:" @max-frontier-size))
 
 (defn print-maze
   "if doall, print maze with params; else just print params"
@@ -311,14 +315,21 @@
       {:found false})))
 
 
-(defn filter-function
-  "pass a node if loc is unvisited or if its total-cost is less than old cost"
-  [node]
-  (let [loc (.loc node)
-        new-f (node-total-cost node)
-        old-f (dosync (:cost (get (ensure a-visited*) loc)))]
-    (or (nil? old-f)
-        (< new-f old-f))))
+(defn filter-function-factory
+  "return a function to pass a node
+   if loc is unvisited or if its total-cost is less than old cost;
+   ensure consistency of filtering of all child nodes for given node
+   by dereference a-visited* only once for each parent"
+  []
+  (let [visited @a-visited*]
+    (fn 
+      [node]
+      (let [loc (.loc node)
+            new-f (node-total-cost node)
+            ;; this doesn't need to be synced b/c cost can only decrease
+            old-f (:cost (get visited loc))]
+        (or (nil? old-f)
+            (< new-f old-f))))))
 
 (defn loc->Node
   "from loc, path, goal make N Node"
@@ -332,12 +343,13 @@
   [loc goal g-of-new-node]
   (let [succ (successors loc)
         nodes (map #(loc->Node %1 loc goal g-of-new-node) succ)]
-    (filter filter-function nodes)))
+    (filter (filter-function-factory) nodes)))
 
 (defn astar-search-maze
   "start-frontier is a priority queue of Node types"
   [start-frontier goal]
   (loop [frontier start-frontier]
+    (send max-frontier-size max (countf frontier))
     #_(println "Frontier length: " (countf frontier))
     (if (deserted? frontier)
       {:found false};
@@ -360,14 +372,13 @@
                                            {:cost current-f :parent parent}))
                                   #_(println "new or ch" new-or-cheaper?)
                                   new-or-cheaper?))]
-            
+
             (when should-expand?
               (let [new-g (inc (.g working-node))
                     unvisited (unvisited-cheaper-successors loc goal new-g)]
                 #_(println "unvisited" (count unvisited))
                 (add-nodes frontier unvisited))
-              #_(println "frontier" frontier)
-              )
+              #_(println "frontier" frontier))
             (recur frontier)))))))
 
 (defn overlay-path
