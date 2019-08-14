@@ -1,5 +1,6 @@
 (ns maze.core
-  (:require [taoensso.nippy :as nippy])
+  (:require [taoensso.nippy :as nippy]
+            [maze.params :refer :all])
   (:import [java.util.concurrent PriorityBlockingQueue])
   (:gen-class))
 
@@ -17,14 +18,7 @@
               ~x)))
 
 (declare print-maze)
-(def start* (atom []))
-(def goal* (atom []))
-(def maze* (atom []))
-(def size* (atom 0))
-(def sparsity* (atom 1))
-(def visited* (atom #{}))
-(def a-visited* (ref (hash-map)))
-(def max-frontier-size (agent 0))
+
 
 (defn init-frontier
   "return a frontier with 1 node: loc start and path at start"
@@ -56,7 +50,7 @@
   (let [[xdist ydist] (mapv - loca locb)]
     (+ (Math/abs xdist) (Math/abs ydist))))
 
-(def pq (priority-queue 100 node-comp))
+#_(def pq (priority-queue 100 node-comp))
 
 ;; The Frontier protocol expects this to be a type containing a sequence of nodes
 ;; for use by the search algorithm
