@@ -1,6 +1,6 @@
 (ns maze.core
   (:require [taoensso.nippy :as nippy]
-            [maze.params :refer :all])
+            [maze.params :as mp])
   (:import [java.util.concurrent PriorityBlockingQueue])
   (:gen-class))
 
@@ -23,7 +23,7 @@
 (defn init-frontier
   "return a frontier with 1 node: loc start and path at start"
   []
-  (let [start-loc @start*]
+  (let [start-loc @mp/start*]
     [{:loc start-loc :path [start-loc]}]))
 
 (defn priority-queue
@@ -156,8 +156,8 @@
 (defn astar-start
   "return initial frontier (PriQ) for astar"
   []
-  (let [start @start*]
-    (new-priq [(->Node start nil 0 (calc-heuristic start @goal*))] 1000)))
+  (let [start @mp/start*]
+    (new-priq [(->Node start nil 0 (calc-heuristic start @mp/goal*))] 1000)))
 
 (defn check-coord
   [loc limit]
@@ -214,11 +214,11 @@
   ([size sparsity doprint]
    (let [base (make-maze size sparsity)
          [start goal] (choose-start-finish size)]
-     (reset! start* start)
-     (reset! goal*  goal)
-     (reset! size* size)
-     (reset! sparsity* sparsity)
-     (reset! maze* 
+     (reset! mp/start* start)
+     (reset! mp/goal*  goal)
+     (reset! mp/size* size)
+     (reset! mp/sparsity* sparsity)
+     (reset! mp/maze* 
              (->
               base
               (update-maze start "S")
@@ -229,17 +229,17 @@
 (defn print-maze-params
   "print just maze parameters, not maze itself"
   []
-  (println "Size:" @size* " Sparsity:" @sparsity*)
-  (println "Start:" @start*)
-  (println "Goal:" @goal*)
-  (println "Max frontier size:" @max-frontier-size))
+  (println "Size:" @mp/size* " Sparsity:" @mp/sparsity*)
+  (println "Start:" @mp/start*)
+  (println "Goal:" @mp/goal*)
+  (println "Max frontier size:" @mp/max-frontier-size))
 
 (defn print-maze
   "if doall, print maze with params; else just print params"
   ([] (print-maze true))
   ([doall]
    (when doall
-     (doseq [ln @maze*]
+     (doseq [ln @mp/maze*]
        (println ln)))
    (print-maze-params)))
 
@@ -254,13 +254,13 @@
   "is loc blocked?"
   [loc]
   (not= "x" 
-     (get-in @maze* loc)))
+     (get-in @mp/maze* loc)))
 
 (defn successors
   "return set of successors to loc"
   [loc]
   (let [[x y] loc
-        size @size*
+        size @mp/size*
         x- (dec x)
         x+ (inc x)
         y- (dec y)
@@ -273,11 +273,11 @@
 (defn visited?
   "has loc been visited?"
   [loc]
-  (contains? @visited* loc))
+  (contains? @mp/visited* loc))
 
-(defn- at-goal?
+(defn at-goal?
   [loc]
-  (= loc @goal*))
+  (= loc @mp/goal*))
 
 ; a node is a map with components loc and parent
 (defn loc->node
@@ -296,7 +296,7 @@
       (let [working-node (get-next frontier)
             {:keys [loc path]} working-node]
         (if (not (visited? loc))
-          (do (swap! visited* conj loc)
+          (do (swap! mp/visited* conj loc)
               (cond
                 (nil? loc) {:found false}
                 (at-goal? loc) {:found true :path path}
@@ -315,7 +315,7 @@
    ensure consistency of filtering of all child nodes for given node
    by dereference a-visited* only once for each parent"
   []
-  (let [visited @a-visited*]
+  (let [visited @mp/a-visited*]
     (fn 
       [node]
       (let [loc (.loc node)
@@ -343,7 +343,7 @@
   "start-frontier is a priority queue of Node types"
   [start-frontier goal]
   (loop [frontier start-frontier]
-    (send max-frontier-size max (countf frontier))
+    (send mp/max-frontier-size max (countf frontier))
     #_(println "Frontier length: " (countf frontier))
     (if (deserted? frontier)
       {:found false};
@@ -353,16 +353,16 @@
             parent (.parent working-node)]
         (if (at-goal? loc)
           (dosync
-           (alter a-visited* assoc loc {:cost nil :parent parent})
+           (alter mp/a-visited* assoc loc {:cost nil :parent parent})
            {:found true})
           ; else, want to expand nod if new or cheaper than on prev visit to this loc
           (let [should-expand? (dosync
                                 (let [current-f (node-total-cost working-node)
-                                      old-f (:cost (get (ensure a-visited*) loc nil))
+                                      old-f (:cost (get (ensure mp/a-visited*) loc nil))
                                       new-or-cheaper? (or (nil? old-f)
                                                           (< current-f old-f))]
                                   (when new-or-cheaper?
-                                    (alter a-visited* assoc loc
+                                    (alter mp/a-visited* assoc loc
                                            {:cost current-f :parent parent}))
                                   #_(println "new or ch" new-or-cheaper?)
                                   new-or-cheaper?))]
@@ -380,7 +380,7 @@
   [path]
   ;; drop the starting node
   (let [reduced-path (drop 1 path)
-        maze @maze*
+        maze @mp/maze*
         index (map #(mod % 10) (range (count reduced-path)))
         indexed-path (partition 2 (interleave index reduced-path))]
     (reduce #(update-maze %1 (second %2) (str (first %2))) maze indexed-path)))
@@ -390,8 +390,8 @@
    extracted path is in reverse order, from goal to start"
   []
   ;; drop the starting node
-  (let [a-visited @a-visited*]
-    (loop [path [@goal*]]
+  (let [a-visited @mp/a-visited*]
+    (loop [path [@mp/goal*]]
       (let [loc (:parent (get a-visited (peek path)))]
         (if (nil? loc)
           path
@@ -404,14 +404,14 @@
   ; drop the start and goal points and reverse the path
   (let [reduced-path (drop 1 (rseq (subvec path 1)))
         indexed-path (partition 2 (interleave reduced-path (cycle (range 10))))]
-    (reduce #(update-maze %1 (first %2) (str (second %2))) @maze* indexed-path )))
+    (reduce #(update-maze %1 (first %2) (str (second %2))) @mp/maze* indexed-path )))
 
 (defn start-search
   "start a new search; print path overlaid result if doprint is true"
   ([]
    (start-search :bfs true))
   ([type-of-search doprint]
-   (reset! visited* #{})
+   (reset! mp/visited* #{})
    ;; TODO fix this to initialize for other types of searches
    (let [init-fn (if (= type-of-search :bfs) bfs-start dfs-start)
          start-node (init-fn)]
@@ -430,9 +430,9 @@
   ([]
    (start-astar-search true))
   ([doprint]
-   (dosync (ref-set a-visited* (hash-map)))
+   (dosync (ref-set mp/a-visited* (hash-map)))
    (let [start-node (astar-start)]
-     (let [{:keys [found]} (astar-search-maze start-node @goal*)]
+     (let [{:keys [found]} (astar-search-maze start-node @mp/goal*)]
        (if found
          (do
            (let [path (extract-path)]
@@ -455,10 +455,10 @@
 (defn save-maze
   []
   (let [f (clojure.java.io/file "maze.maz")]
-    (nippy/freeze-to-file f {:start @start*
-                             :goal @goal*
-                             :size @size*
-                             :maze @maze*})))
+    (nippy/freeze-to-file f {:start @mp/start*
+                             :goal @mp/goal*
+                             :size @mp/size*
+                             :maze @mp/maze*})))
 
 (defn read-maze
   []

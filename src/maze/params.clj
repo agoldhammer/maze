@@ -8,3 +8,6 @@
 (def visited* (atom #{}))
 (def a-visited* (ref (hash-map)))
 (def max-frontier-size (agent 0))
+
+(def nthreads 4)
+(def split-frontier-at 32)
