@@ -38,6 +38,11 @@
 ;; h (heuristic); total cost f = g + h
 (deftype Node [loc parent g h])
 
+(defn node->tuple
+  "returns [loc parent g h] from Node"
+  [node]
+  [(.loc node) (.parent node) (.g node) (.h node)])
+
 (defn node-total-cost [^Node node]
   (+ (.g node) (.h node)))
 
@@ -64,7 +69,7 @@
   (get-next [this] "get next node")
   (raw-remainder [this] "return the underlying remainder node sequence without converting to type")
   (remainder [this] "remainder (as type) after dropping the next node")
-  (add-nodes [this vec-of-nodes] "add nodes in vector and return new frontier")
+  (add-nodes! [this vec-of-nodes] "add nodes in vector and return new frontier")
   (deserted? [this] "Is the frontier empty?")
   )
 
@@ -80,7 +85,7 @@
     (subvec (.nodes this) 1))
   (remainder [this]
     (->Fifo (raw-remainder this)))
-  (add-nodes [this v-of-nodes]
+  (add-nodes! [this v-of-nodes]
     (->Fifo (into (raw-remainder this) v-of-nodes)))
   (deserted? [this]
     (empty? (.nodes this))))
@@ -109,7 +114,7 @@
     (pop (.nodes this)))
   (remainder [this]
     (->StackD (raw-remainder this)))
-  (add-nodes [this v-of-nodes]
+  (add-nodes! [this v-of-nodes]
     (->StackD (into (raw-remainder this) v-of-nodes)))
   (deserted? [this]
     (empty? (.nodes this))))
@@ -121,7 +126,7 @@
   PriQ
   (countf [this]
     (.size (.pq this)))
-  (add-nodes [this v-of-nodes]
+  (add-nodes! [this v-of-nodes]
              (doseq [v v-of-nodes]
                (.add (.pq this) v)))
   ;; note!! remainder is not used, get next strips head of queue
@@ -150,7 +155,7 @@
   [vec-of-Nodes size]
   (let [queue (priority-queue size node-comp)
         pq (->PriQ queue)]
-    (add-nodes pq vec-of-Nodes)
+    (add-nodes! pq vec-of-Nodes)
     pq))
 
 (defn start-Node
@@ -309,7 +314,7 @@
                 :else (let [succ (successors loc)
                             unvisited (filter #(not (visited? %)) succ)
                             nodes (mapv #(loc->node % path) unvisited)
-                            new-frontier (add-nodes frontier nodes)]
+                            new-frontier (add-nodes! frontier nodes)]
                         (recur new-frontier))))
           (recur (remainder frontier))))
       {:found false})))
@@ -377,7 +382,7 @@
               (let [new-g (inc (.g working-node))
                     unvisited (unvisited-cheaper-successors loc goal new-g)]
                 #_(println "unvisited" (count unvisited))
-                (add-nodes frontier unvisited))
+                (add-nodes! frontier unvisited))
               #_(println "frontier" frontier))
             (recur frontier)))))))
 

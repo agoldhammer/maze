@@ -1,6 +1,6 @@
 (ns maze.core-test
   (:require [clojure.test :refer [deftest is testing]]
-            [maze.core :as mc :refer :all]
+            [maze.core :as mc]
             [maze.paral :as mp]
             [maze.params :as mparms]))
 
@@ -24,7 +24,7 @@
   [n]
   (let [queue (mc/priority-queue 1000 mc/node-comp)
         pq (mc/->PriQ queue)]
-    (mc/add-nodes pq (make-sequence-of-Nodes n))
+    (mc/add-nodes! pq (make-sequence-of-Nodes n))
     pq))
 
 (deftest test-split-frontier
@@ -58,12 +58,31 @@
   (testing "retrieve from buffer with something in it"
     (let [buffers (mp/create-buffers mparms/nthreads)
           buffer (nth buffers 0)
-          in-tuple [[0 1] 1 [0 0]]
-          [loc cost parent] in-tuple]
-      (mp/put-buffer buffer loc cost parent)
-      (let [out-tuple (mp/buffer-next buffer)]
-        (is (= out-tuple [loc [cost parent]]))
+          in-tuple [[0 1] [0 0] 1 1]
+          node (apply mc/->Node in-tuple)]
+      (mp/put-buffer buffer node)
+      (let [out-node (mp/buffer-next buffer)]
+        (is (= out-node node))
         (is (nil? (mp/buffer-next buffer)))))))
+
+(deftest test-get-open
+  (testing "get open queue from thread parms")
+  (let [tp (mp/create-thread-params)
+        pq (mp/get-open tp)]
+    (is (not (nil? pq)))))
+
+(deftest test-create-expanders
+  (testing 
+   "creates nthread expanders with start-node in proper receptacle"
+    (let [start-node (mc/astar-start)
+          expanders (mp/create-expanders mparms/nthreads start-node)
+          start-recipient (mp/compute-recipient start-node)
+          nth-tp (nth expanders start-recipient)
+          pq (mp/get-open nth-tp)]
+      (is (not (nil? pq)))
+      (is (< start-recipient (count expanders)) )
+      (is (not (nil? nth-tp)))
+      (is (= (mc/countf (mp/get-open (nth expanders start-recipient))) 1) ))))
 
 
 
