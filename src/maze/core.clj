@@ -95,7 +95,7 @@
   (let [size (quot (countf frontier) n)
         vec-of-nodes (shuffle (into [] (.toArray (.pq frontier))))]
     (doall 
-     (map #(new-priq %1 1000) (partition size vec-of-nodes))))
+     (map #(new-priq %1 1000) (partition-all size vec-of-nodes))))
   )
 
 ;; TODO ------------------------------------
@@ -152,6 +152,12 @@
         pq (->PriQ queue)]
     (add-nodes pq vec-of-Nodes)
     pq))
+
+(defn start-Node
+  "return start Node"
+  []
+  (let [start @mp/start*]
+    (->Node start nil 0 (calc-heuristic start @mp/goal*))))
 
 (defn astar-start
   "return initial frontier (PriQ) for astar"
@@ -431,6 +437,7 @@
    (start-astar-search true))
   ([doprint]
    (dosync (ref-set mp/a-visited* (hash-map)))
+   (send mp/max-frontier-size (constantly 0) 0)
    (let [start-node (astar-start)]
      (let [{:keys [found]} (astar-search-maze start-node @mp/goal*)]
        (if found
@@ -453,17 +460,23 @@
 
 ;; TODO Use Nippy
 (defn save-maze
-  []
-  (let [f (clojure.java.io/file "maze.maz")]
+  [fname]
+  (let [f (clojure.java.io/file (str fname ".maz"))]
     (nippy/freeze-to-file f {:start @mp/start*
                              :goal @mp/goal*
                              :size @mp/size*
-                             :maze @mp/maze*})))
+                             :maze @mp/maze*}))
+  (println "Maze saved as" fname))
 
 (defn read-maze
-  []
-  (let [f (clojure.java.io/file "maze.maz")]
-    (nippy/thaw-from-file f)))
+  [fname]
+  (let [f (clojure.java.io/file (str fname ".maz"))
+        parms (nippy/thaw-from-file f)]
+    (reset! mp/start* (:start parms))
+    (reset! mp/goal* (:goal parms))
+    (reset! mp/size* (:size parms))
+    (reset! mp/maze* (:maze parms)))
+  (println "Read maze" fname))
 
 (defn -main
   "I don't do a whole lot ... yet."
