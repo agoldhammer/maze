@@ -28,7 +28,7 @@
 (defn make-test-pq
   "make a PriQ for testing"
   [n]
-  (let [queue (mb/priority-queue 1000 mb/node-compare)
+  (let [queue (mb/priority-queue 1000 mb/node-comp)
         pq (mb/->PriQ queue)]
     (mb/add-nodes! pq (make-sequence-of-Nodes n))
     pq))
@@ -65,7 +65,7 @@
     (let [buffers (mpar/create-buffers mp/nthreads)
           buffer (nth buffers 0)
           in-tuple [[0 1] [0 0] 1 1]
-          node (apply mc/->Node in-tuple)]
+          node (apply mb/->Node in-tuple)]
       (mpar/put-buffer buffer node)
       (let [out-node (mpar/buffer-next buffer)]
         (is (= out-node node))
@@ -82,7 +82,7 @@
    "creates nthread expanders with start-node in proper receptacle"
     (let [start-node (mb/astar-start)
           expanders (mpar/create-expanders mp/nthreads start-node)
-          start-recipient (mpar/comparute-recipient start-node)
+          start-recipient (mpar/compute-recipient start-node)
           nth-tp (nth expanders start-recipient)
           pq (mpar/get-open nth-tp)]
       (is (not (nil? pq)))
@@ -93,10 +93,7 @@
 (deftest test-trivial
   (testing "trivial maze"
     (setup-trivial-maze)
-    (is (=  mp/start* [1 0]))
+    (is (=  @mp/start* [1 0]))
     (let [start (mb/start-Node)
           succs (mpar/make-successor-nodes start)]
       (is (= (count succs) 3)))))
-
-
-
