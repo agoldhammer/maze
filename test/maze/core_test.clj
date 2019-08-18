@@ -55,7 +55,7 @@
           pq (:open thr)
           node (mb/get-next! pq)]
       (is (= node start))))
-  (testing "thread creation emparty"
+  (testing "thread creation empty"
     (let [thr (mpar/create-thread-params)]
       (is (mb/deserted? (:open thr))))))
 

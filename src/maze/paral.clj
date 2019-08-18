@@ -30,20 +30,12 @@
         (alter buff disj (first nodes)))
       (first nodes))))
 
-(defn create-thread-params
-  "create the open and closed structures for a thread, w or w/o init"
-  []
-  (let [thr 
-        {:open (mb/new-priq [] 1000)
-         :closed (hash-map)}]
-    thr))
-
 (defn get-open
   "return the open queue from threat params tp"
   [tp]
   (:open tp))
 
-(defn add-to-open-queue
+(defn add-to-open-queue!
   "add nodes to open queue"
   [thread-params node-or-nodes]
   (let [pq (get-open thread-params)]
@@ -51,12 +43,24 @@
       (mb/add-nodes! pq node-or-nodes)
       (mb/add-nodes! pq [node-or-nodes]))))
 
+(defn create-thread-params
+  "create the open and closed structures for a thread, w or w/o init"
+  ([]
+   (let [thr
+         {:open (mb/new-priq [] 1000)
+          :closed (hash-map)}]
+     thr))
+  ([node]
+   (let [thr (create-thread-params)]
+     (add-to-open-queue! thr node)
+     thr)))
+
 (defn create-expanders
   "helper for thread functions to expand nodes"
   [n start-node]
   (let [thread-params (vec (repeatedly mp/nthreads create-thread-params))
         start-recipient (compute-recipient start-node)]
-    (add-to-open-queue (nth thread-params start-recipient) start-node)
+    (add-to-open-queue! (nth thread-params start-recipient) start-node)
     thread-params))
 
 (def terminate-flag (atom false))
