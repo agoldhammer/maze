@@ -135,8 +135,8 @@
    (reset! mp/visited* #{})
    ;; TODO fix this to initialize for other types of searches
    (let [init-fn (if (= type-of-search :bfs) bfs-start dfs-start)
-         start-node (init-fn)]
-     (let [{:keys [found path]} (search-maze start-node)]
+          (init-fn)]
+     (let [{:keys [found path]} (search-maze )]
        (if found
          (do
            (when doprint
@@ -153,8 +153,8 @@
   ([doprint]
    (dosync (ref-set mp/a-visited* (hash-map)))
    (send mp/max-frontier-size (constantly 0) 0)
-   (let [start-node (mb/astar-start)]
-     (let [{:keys [found]} (astar-search-maze start-node @mp/goal*)]
+   (let [ (mb/astar-start-frontier)]
+     (let [{:keys [found]} (astar-search-maze  @mp/goal*)]
        (if found
          (do
            (let [path (mo/extract-path)]

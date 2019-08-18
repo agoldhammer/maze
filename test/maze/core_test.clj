@@ -50,7 +50,7 @@
 
 (deftest test-thread-create
   (testing "thread creation with node"
-    (let [start mb/astar-start
+    (let [start mb/start-node
           thr (mpar/create-thread-params start)
           pq (:open thr)
           node (mb/get-next! pq)]
@@ -80,7 +80,7 @@
 (deftest test-create-expanders
   (testing 
    "creates nthread expanders with start-node in proper receptacle"
-    (let [start-node (mb/astar-start)
+    (let [start-node (mb/start-node)
           expanders (mpar/create-expanders mp/nthreads start-node)
           start-recipient (mpar/compute-recipient start-node)
           nth-tp (nth expanders start-recipient)
@@ -94,6 +94,6 @@
   (testing "trivial maze"
     (setup-trivial-maze)
     (is (=  @mp/start* [1 0]))
-    (let [start (mb/start-Node)
+    (let [start (mb/start-node)
           succs (mpar/make-successor-nodes start)]
       (is (= (count succs) 3)))))

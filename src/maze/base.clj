@@ -141,13 +141,13 @@
     pq))
 
 
-(defn start-Node
+(defn start-node
   "return start Node"
   []
   (let [start @mp/start*]
     (->Node start nil 0 (calc-heuristic start @mp/goal*))))
 
-(defn astar-start
+(defn astar-start-frontier
   "return initial frontier (PriQ) for astar"
   []
   (let [start @mp/start*]
