@@ -1,5 +1,7 @@
 (ns maze.base
-  (:require [maze.params :as mp]))
+  (:require [maze.params :as mp])
+  (:import [java.util.concurrent PriorityBlockingQueue])
+  )
 
 ;; Node type has field loc (location), parent, g (cost to node), and
 ;; h (heuristic); total cost f = g + h
@@ -38,7 +40,8 @@
 (defprotocol Frontier
   "protocol for handling various frontier types"
   (countf [this] "return count of node list")
-  (get-next! [this] "get next node")
+  (get-next [this] "get next non mutating")
+  (get-next! [this] "get next node mutating")
   (raw-remainder [this] "return the underlying remainder node sequence without converting to type")
   (remainder [this] "remainder (as type) after dropping the next node")
   (add-nodes! [this vec-of-nodes] "add nodes in vector and return new frontier")

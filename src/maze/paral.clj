@@ -1,16 +1,14 @@
 (ns maze.paral
-  (:require [maze.params :refer [a-visited* goal* max-frontier-size
-                                 nthreads split-frontier-at]]
-            [maze.core :as mc :refer [->Node node-total-cost unvisited-cheaper-successors
-                                      add-nodes! get-next! quickpeek at-goal? countf deserted?
-                                      split-frontier successors quickpeek calc-heuristic]]))
+  (:require [maze.params :as mp]
+            [maze.utils :as mu]
+            [maze.base :as mb]))
 
 ;; implementing algos from Fukunga, Botea, et al.
 
 (defn compute-recipient
   "compute recipient of Node based on has of its .loc"
   [node]
-  (mod (hash node) nthreads))
+  (mod (hash node) mp/nthreads))
 
 (defn create-buffers
   "create n buffers to receive nodes"
@@ -36,7 +34,7 @@
   "create the open and closed structures for a thread, w or w/o init"
   []
   (let [thr 
-        {:open (mc/new-priq [] 1000)
+        {:open (mb/new-priq [] 1000)
          :closed (hash-map)}]
     thr))
 
@@ -50,13 +48,13 @@
   [thread-params node-or-nodes]
   (let [pq (get-open thread-params)]
     (if (vector? node-or-nodes)
-      (add-nodes! pq node-or-nodes)
-      (add-nodes! pq [node-or-nodes]))))
+      (mb/add-nodes! pq node-or-nodes)
+      (mb/add-nodes! pq [node-or-nodes]))))
 
 (defn create-expanders
   "helper for thread functions to expand nodes"
   [n start-node]
-  (let [thread-params (vec (repeatedly nthreads create-thread-params))
+  (let [thread-params (vec (repeatedly mp/nthreads create-thread-params))
         start-recipient (compute-recipient start-node)]
     (add-to-open-queue (nth thread-params start-recipient) start-node)
     thread-params))
@@ -79,23 +77,23 @@
  [node]
  (let [loc (.loc node)
        newg (inc (.g node))
-       succs (successors (.loc node))
-       goal @goal*]
+       succs (mu/successors (.loc node))
+       goal @mp/goal*]
    (into [] (for [s succs]
-              (->Node s loc newg (calc-heuristic s goal))))
+              (mb/->Node s loc newg (mu/calc-heuristic s goal))))
    ))
 
 (defn expand-open
   "take next node from open Frontier on thread and expand it"
   [open closed]
-  (if-let [testnode (quickpeek open)]
-    (let [current-cost (node-total-cost testnode)]
+  (if-let [testnode (mb/quickpeek open)]
+    (let [current-cost (mb/node-total-cost testnode)]
       (if (> current-cost @incumbent-cost)
         nil
-        (let [node (get-next! open)
+        (let [node (mb/get-next! open)
               succ (make-successor-nodes node)]
           (add-to-closed closed node)
-          (add-nodes! open succ)) ;; fix this, must return val or use mutable closed
+          (mb/add-nodes! open succ)) ;; fix this, must return val or use mutable closed
         ))))
 
 
@@ -123,12 +121,12 @@
 
 
 
-(defn par-astar-search-maze
+#_(defn par-astar-search-maze
   "start-frontier is a priority queue of Node types"
   [start-frontier goal is-subsearch?]
   (when (not is-subsearch?) (println "Starting parallel search"))
   (loop [frontier start-frontier]
-    (send max-frontier-size max (countf frontier))
+    (send max-frontier-size max (mb/countf frontier))
     (if (and (not is-subsearch?)
              (>= (countf frontier) split-frontier-at))
       (let [new-frontiers (split-frontier frontier nthreads)
@@ -180,12 +178,12 @@
               
               (recur frontier))))))))
 
-(defn par-start-astar-search
+#_(defn par-start-astar-search
   "start a new astar search; print path overlaid result if doprint is true"
   ([]
    (par-start-astar-search true))
   ([doprint]
-   (dosync (ref-set a-visited* (hash-map)))
+   (dosync (ref-set mp/a-visited* (hash-map)))
    (send max-frontier-size (constantly 0) 0)
    (let [start-node (mc/astar-start)]
      (let [{:keys [found]} (par-astar-search-maze start-node @goal* false)]

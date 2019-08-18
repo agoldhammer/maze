@@ -3,8 +3,7 @@
             [maze.params :as mp]
             [maze.base :as mb]
             [maze.overlay :as mo]
-            [maze.utils :as mu])
-  (:import [java.util.concurrent PriorityBlockingQueue])
+            [maze.utils :as mu :refer [make-maze]])
   (:gen-class))
 
 (def DEBUG 0)
@@ -48,7 +47,7 @@
   (loop [frontier start]
     #_(println "Frontier length: " (countf frontier))
     (if (not (mb/deserted? frontier))
-      (let [working-node (mb/get-next! frontier)
+      (let [working-node (mb/get-next frontier)
             {:keys [loc path]} working-node]
         (if (not (mu/visited? loc))
           (do (swap! mp/visited* conj loc)
@@ -144,7 +143,7 @@
              (doseq [ln (mo/overlay-path (drop-last 1 path))]
                (println ln)))
            (println "Found: Path length: " (count path))
-           (mp/print-maze-params))
+           (mu/print-maze-params))
          (println "No path was found"))))))
 
 (defn start-astar-search
@@ -163,12 +162,12 @@
                (doseq [ln (mo/a-overlay-path path)]
                  (println ln)))
              (println "Found: Path length: " (count path))
-             (mp/print-maze-params)))
+             (mu/print-maze-params)))
          (println "No path was found"))))))
 
 (defn new-maze-problem
   [size sparsity]
-  (mu/make-full-maze size sparsity)
+  (mu/make-maze size sparsity)
   (start-search)
   "Done with problem"
   #_(start-bfs-search)

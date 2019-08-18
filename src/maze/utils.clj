@@ -22,7 +22,7 @@
   (let [f (change-randomly sparsity)]
     (mapv f (range len))))
 
-(defn make-maze
+(defn make-bare-maze
   "make a bare maze of given size with wall elements of sparsity 0-99"
   [size sparsity]
   (vec (repeatedly size #(put-wall-in-row size sparsity))))
@@ -49,13 +49,13 @@
       [start new-finish])))
 
 (declare print-maze)
-(defn make-full-maze
+(defn make-maze
   "make maze of given size and sparsity with S and G
    indicating start and goal positions; print if doprint is true"
   ([size sparsity]
-   (make-full-maze size sparsity true))
+   (make-maze size sparsity true))
   ([size sparsity doprint]
-   (let [base (make-maze size sparsity)
+   (let [base (make-bare-maze size sparsity)
          [start goal] (choose-start-finish size)]
      (reset! mp/start* start)
      (reset! mp/goal*  goal)
