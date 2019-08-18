@@ -1,9 +1,9 @@
 (ns maze.paral
   (:require [maze.params :refer [a-visited* goal* max-frontier-size
                                  nthreads split-frontier-at]]
-            [maze.core :as mc :refer [node-total-cost unvisited-cheaper-successors
-                                      add-nodes! get-next at-goal? countf deserted?
-                                      split-frontier]]))
+            [maze.core :as mc :refer [->Node node-total-cost unvisited-cheaper-successors
+                                      add-nodes! get-next! quickpeek at-goal? countf deserted?
+                                      split-frontier successors quickpeek calc-heuristic]]))
 
 ;; implementing algos from Fukunga, Botea, et al.
 
@@ -54,7 +54,7 @@
       (add-nodes! pq [node-or-nodes]))))
 
 (defn create-expanders
-  "thread functions to expand nodes"
+  "helper for thread functions to expand nodes"
   [n start-node]
   (let [thread-params (vec (repeatedly nthreads create-thread-params))
         start-recipient (compute-recipient start-node)]
@@ -67,15 +67,46 @@
   []
   (not @terminate-flag))
 
+(def incumbent-cost (atom Integer/MAX_VALUE))
+
+(defn add-to-closed
+  "add node to closed set"
+  [node closed]
+  (conj closed node))
+
+(defn make-successor-nodes
+ "make successors to the current node"
+ [node]
+ (let [loc (.loc node)
+       newg (inc (.g node))
+       succs (successors (.loc node))
+       goal @goal*]
+   (into [] (for [s succs]
+              (->Node s loc newg (calc-heuristic s goal))))
+   ))
+
+(defn expand-open
+  "take next node from open Frontier on thread and expand it"
+  [open closed]
+  (if-let [testnode (quickpeek open)]
+    (let [current-cost (node-total-cost testnode)]
+      (if (> current-cost @incumbent-cost)
+        nil
+        (let [node (get-next! open)
+              succ (make-successor-nodes node)]
+          (add-to-closed closed node)
+          (add-nodes! open succ)) ;; fix this, must return val or use mutable closed
+        ))))
+
+
 ;; https://stackoverflow.com/questions/42700407/immediately-kill-a-running-future-thread
-(defn psearch-start
+#_(defn psearch-start
   "start a new || astar search; print path overlaid result if doprint is true"
   ([]
    (psearch-start true))
   ([doprint]
    (send max-frontier-size (constantly 0) 0)
    (let [start-node (mc/astar-start)
-         incumbent-cost Integer/MAX_VALUE
          buffers (create-buffers nthreads)]
      (while (keep-going?)
        )
@@ -89,6 +120,8 @@
                (println "Found: Path length: " (count path))
                (mc/print-maze-params)))
            (println "No path was found"))))))
+
+
 
 (defn par-astar-search-maze
   "start-frontier is a priority queue of Node types"
@@ -114,7 +147,7 @@
       (if (deserted? frontier)
         {:found false};
         ; else
-        (let [working-node (get-next frontier)
+        (let [working-node (get-next! frontier)
               loc (.loc working-node)
               parent (.parent working-node)]
           (if (at-goal? loc)

@@ -55,6 +55,11 @@
   (let [[xdist ydist] (mapv - loca locb)]
     (+ (Math/abs xdist) (Math/abs ydist))))
 
+(defn print-node
+  [node]
+  (let [[loc parent g h] (node->tuple node)]
+    (println "Node: loc->" loc "parent->" parent "g->" g "h->" h)))
+
 #_(def pq (priority-queue 100 node-comp))
 
 ;; The Frontier protocol expects this to be a type containing a sequence of nodes
@@ -66,11 +71,12 @@
 (defprotocol Frontier
   "protocol for handling various frontier types"
   (countf [this] "return count of node list")
-  (get-next [this] "get next node")
+  (get-next! [this] "get next node")
   (raw-remainder [this] "return the underlying remainder node sequence without converting to type")
   (remainder [this] "remainder (as type) after dropping the next node")
   (add-nodes! [this vec-of-nodes] "add nodes in vector and return new frontier")
   (deserted? [this] "Is the frontier empty?")
+  (quickpeek [this] "Peek at top priority element")
   )
 
 (deftype Fifo [nodes])
@@ -127,16 +133,20 @@
   (countf [this]
     (.size (.pq this)))
   (add-nodes! [this v-of-nodes]
-             (doseq [v v-of-nodes]
-               (.add (.pq this) v)))
+    (doseq [v v-of-nodes]
+      (.add (.pq this) v)))
   ;; note!! remainder is not used, get next strips head of queue
-  (get-next [this]
-    (.take (.pq this)))
+  (get-next! [this]
+    (if (deserted? this)
+      nil
+      (.take (.pq this))))
   (remainder [this]
     (.take (.pq this))
     this)
   (deserted? [this]
-    (nil? (.peek (.pq this)))))
+    (nil? (.peek (.pq this))))
+  (quickpeek [this]
+         (.peek (.pq this))))
 
 ;; -----------------------------------------
 
@@ -268,7 +278,7 @@
      (get-in @mp/maze* loc)))
 
 (defn successors
-  "return set of successors to loc"
+  "return vector of successors to loc"
   [loc]
   (let [[x y] loc
         size @mp/size*
@@ -304,7 +314,7 @@
   (loop [frontier start]
     #_(println "Frontier length: " (countf frontier))
     (if (not (deserted? frontier))
-      (let [working-node (get-next frontier)
+      (let [working-node (get-next! frontier)
             {:keys [loc path]} working-node]
         (if (not (visited? loc))
           (do (swap! mp/visited* conj loc)
@@ -359,7 +369,7 @@
     (if (deserted? frontier)
       {:found false};
       ; else
-      (let [working-node (get-next frontier)
+      (let [working-node (get-next! frontier)
             loc (.loc working-node)
             parent (.parent working-node)]
         (if (at-goal? loc)

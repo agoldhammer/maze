@@ -1,9 +1,14 @@
 (ns maze.core-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [maze.core :as mc]
             [maze.paral :as mp]
             [maze.params :as mparms]))
 
+(defn setup-trivial-maze
+  []
+  (mc/read-maze "/home/agold/Prog/maze/trivial4"))
+
+#_(use-fixtures :once setup-trivial-maze )
 
 (defn make-dummy-Node
   "make a dummy node"
@@ -27,7 +32,7 @@
     (mc/add-nodes! pq (make-sequence-of-Nodes n))
     pq))
 
-(deftest test-split-frontier
+#_(deftest test-split-frontier
   "splitting a frontier should produce PriQs of correct size"
   (testing "frontier splitting"
     (let [size 100
@@ -47,7 +52,7 @@
     (let [start mc/astar-start
           thr (mp/create-thread-params start)
           pq (:open thr)
-          node (mc/get-next pq)]
+          node (mc/get-next! pq)]
       (is (= node start))))
   (testing "thread creation empty"
     (let [thr (mp/create-thread-params)]
@@ -83,6 +88,14 @@
       (is (< start-recipient (count expanders)) )
       (is (not (nil? nth-tp)))
       (is (= (mc/countf (mp/get-open (nth expanders start-recipient))) 1) ))))
+
+(deftest test-trivial
+  (testing "trivial maze"
+    (setup-trivial-maze)
+    (is (= @mparms/start* [1 0]))
+    (let [start (mc/start-Node)
+          succs (mp/make-successor-nodes start)]
+      (is (= (count succs) 3)))))
 
 
 
