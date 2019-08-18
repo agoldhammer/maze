@@ -80,7 +80,7 @@
        succs (mu/successors (.loc node))
        goal @mp/goal*]
    (into [] (for [s succs]
-              (mb/->Node s loc newg (mu/calc-heuristic s goal))))
+              (mb/->Node s loc newg (mb/calc-heuristic s goal))))
    ))
 
 (defn expand-open

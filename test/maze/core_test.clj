@@ -1,8 +1,9 @@
 (ns maze.core-test
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
+            [maze.base :as mb]
             [maze.core :as mc]
-            [maze.paral :as mp]
-            [maze.params :as mparms]))
+            [maze.paral :as mpar]
+            [maze.params :as mp]))
 
 (defn setup-trivial-maze
   []
@@ -18,7 +19,7 @@
         g (rand-int 50)
         h (rand-int 1000)]
     ;; loc parent g h
-    (apply mc/->Node [[x y] [(inc x) y] g h])))
+    (apply mb/->Node [[x y] [(inc x) y] g h])))
 
 (defn make-sequence-of-Nodes
   [n]
@@ -27,9 +28,9 @@
 (defn make-test-pq
   "make a PriQ for testing"
   [n]
-  (let [queue (mc/priority-queue 1000 mc/node-comp)
-        pq (mc/->PriQ queue)]
-    (mc/add-nodes! pq (make-sequence-of-Nodes n))
+  (let [queue (mb/priority-queue 1000 mb/node-compare)
+        pq (mb/->PriQ queue)]
+    (mb/add-nodes! pq (make-sequence-of-Nodes n))
     pq))
 
 #_(deftest test-split-frontier
@@ -49,52 +50,52 @@
 
 (deftest test-thread-create
   (testing "thread creation with node"
-    (let [start mc/astar-start
-          thr (mp/create-thread-params start)
+    (let [start mb/astar-start
+          thr (mpar/create-thread-params start)
           pq (:open thr)
-          node (mc/get-next! pq)]
+          node (mb/get-next! pq)]
       (is (= node start))))
-  (testing "thread creation empty"
-    (let [thr (mp/create-thread-params)]
-      (is (mc/deserted? (:open thr))))))
+  (testing "thread creation emparty"
+    (let [thr (mpar/create-thread-params)]
+      (is (mb/deserted? (:open thr))))))
 
 
 (deftest test-buffer-next-and-put-buffer
   (testing "retrieve from buffer with something in it"
-    (let [buffers (mp/create-buffers mparms/nthreads)
+    (let [buffers (mpar/create-buffers mp/nthreads)
           buffer (nth buffers 0)
           in-tuple [[0 1] [0 0] 1 1]
           node (apply mc/->Node in-tuple)]
-      (mp/put-buffer buffer node)
-      (let [out-node (mp/buffer-next buffer)]
+      (mpar/put-buffer buffer node)
+      (let [out-node (mpar/buffer-next buffer)]
         (is (= out-node node))
-        (is (nil? (mp/buffer-next buffer)))))))
+        (is (nil? (mpar/buffer-next buffer)))))))
 
 (deftest test-get-open
-  (testing "get open queue from thread parms")
-  (let [tp (mp/create-thread-params)
-        pq (mp/get-open tp)]
+  (testing "get open queue from thread mp")
+  (let [tp (mpar/create-thread-params)
+        pq (mpar/get-open tp)]
     (is (not (nil? pq)))))
 
 (deftest test-create-expanders
   (testing 
    "creates nthread expanders with start-node in proper receptacle"
-    (let [start-node (mc/astar-start)
-          expanders (mp/create-expanders mparms/nthreads start-node)
-          start-recipient (mp/compute-recipient start-node)
+    (let [start-node (mb/astar-start)
+          expanders (mpar/create-expanders mp/nthreads start-node)
+          start-recipient (mpar/comparute-recipient start-node)
           nth-tp (nth expanders start-recipient)
-          pq (mp/get-open nth-tp)]
+          pq (mpar/get-open nth-tp)]
       (is (not (nil? pq)))
       (is (< start-recipient (count expanders)) )
       (is (not (nil? nth-tp)))
-      (is (= (mc/countf (mp/get-open (nth expanders start-recipient))) 1) ))))
+      (is (= (mb/countf (mpar/get-open (nth expanders start-recipient))) 1) ))))
 
 (deftest test-trivial
   (testing "trivial maze"
     (setup-trivial-maze)
-    (is (= @mparms/start* [1 0]))
-    (let [start (mc/start-Node)
-          succs (mp/make-successor-nodes start)]
+    (is (=  mp/start* [1 0]))
+    (let [start (mb/start-Node)
+          succs (mpar/make-successor-nodes start)]
       (is (= (count succs) 3)))))
 
 
