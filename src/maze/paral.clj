@@ -23,7 +23,7 @@
   (let [f (if (vector? node-or-nodes) concat conj)]
     (dosync (alter buffer f node-or-nodes))))
 
-(defn buffer->vec!
+(defn buffer->vec-of-nodes!
   "if buffer not empty, return contents as vector and reset; else return empty vec
    buffer must be a ref (e.g. created by create-buffers)"
   [buff]
@@ -93,10 +93,10 @@
 
 (defn add-to-buffers!
  "given vec of nodes, for each node, compute destination buffer and add node to it "
- [vec-of-nodes]
+ [buffers vec-of-nodes]
  (doseq [node vec-of-nodes]
    (let [nbuff (compute-recipient node)
-         buff (nth (:buffers tparams) nbuff)]
+         buff (nth buffers nbuff)]
      (put-buffer! buff node))))
 
 (defn put-closed
@@ -114,7 +114,7 @@
         (let [node (mb/get-next! open)
               succs (make-successor-nodes node)]
           (put-closed closed node)
-          (add-to-buffers! succs)
+          (add-to-buffers! buffers succs)
           ;; TODO add succs to appropriate buffer
           )))))
 

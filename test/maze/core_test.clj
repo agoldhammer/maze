@@ -67,12 +67,12 @@
           in-tuple [[0 1] [0 0] 1 1]
           node (apply mb/->Node in-tuple)]
       (mpar/put-buffer! buffer node)
-      (let [outvec (mpar/buffer->vec! buffer)]
+      (let [outvec (mpar/buffer->vec-of-nodes! buffer)]
         (is (= [node] outvec))
-        (is (= [] (mpar/buffer->vec! buffer))))
+        (is (= [] (mpar/buffer->vec-of-nodes! buffer))))
       (let [vec-of-nodes (make-vec-of-Nodes 4)]
         (mpar/put-buffer! buffer vec-of-nodes)
-        (is (= 4 (count (mpar/buffer->vec! buffer))) "returned count shd equal inserted")))))
+        (is (= 4 (count (mpar/buffer->vec-of-nodes! buffer))) "returned count shd equal inserted")))))
 
 (deftest test-get-open
   (testing "get open queue from thread mp")
@@ -100,3 +100,10 @@
     (let [start (mb/start-node)
           succs (mpar/make-successor-nodes start)]
       (is (= (count succs) 3)))))
+
+(deftest test-buffer-load
+  (testing "loading of buffers: count out should = count in")
+  (let [buffers (mpar/create-buffers mp/nthreads)
+        vec-of-nodes (make-vec-of-Nodes 10)]
+    (mpar/add-to-buffers! buffers vec-of-nodes)
+    (is (= (count vec-of-nodes) (reduce + (map #(count (deref %)) buffers))))))
