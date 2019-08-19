@@ -13,22 +13,26 @@
 (defn create-buffers
   "create n buffers to receive nodes"
   [n]
-  (into [] (repeatedly 4 (partial ref #{}))))
+  (into [] (repeatedly n (partial ref #{}))))
 
-(defn put-buffer
+(def buffers (create-buffers mp/nthreads))
+
+(defn put-buffer!
   "put a node in buffer"
-  [buffer node]
-  (dosync (alter buffer conj node)))
+  [buffer node-or-nodes]
+  (let [f (if (vector? node-or-nodes) concat conj)]
+    (dosync (alter buffer f node-or-nodes))))
 
-(defn buffer-next
-  "take next node from buffer, delete and return it if there is one; return nil if not
+(defn buffer->vec!
+  "if buffer not empty, return contents as vector and reset; else return empty vec
    buffer must be a ref (e.g. created by create-buffers)"
   [buff]
   (dosync
-    (let [nodes (seq (ensure buff))]
+    (let [nodes (seq (ensure buff))
+          nodevec (into [] nodes)]
       (when nodes
-        (alter buff disj (first nodes)))
-      (first nodes))))
+        (ref-set buff #{}))
+      nodevec)))
 
 (defn get-open
   "return the open queue from threat params tp"
@@ -87,6 +91,19 @@
               (mb/->Node s loc newg (mb/calc-heuristic s goal))))
    ))
 
+(defn add-to-buffers!
+ "given vec of nodes, for each node, compute destination buffer and add node to it "
+ [vec-of-nodes]
+ (doseq [node vec-of-nodes]
+   (let [nbuff (compute-recipient node)
+         buff (nth (:buffers tparams) nbuff)]
+     (put-buffer! buff node))))
+
+(defn put-closed
+  "add node to closed buffer"
+  [closed node]
+  (assoc closed (.loc node) node))
+
 (defn expand-open
   "take next node from open Frontier on thread and expand it"
   [open closed]
@@ -95,10 +112,11 @@
       (if (> current-cost @incumbent-cost)
         nil
         (let [node (mb/get-next! open)
-              succ (make-successor-nodes node)]
-          (add-to-closed closed node)
-          (mb/add-nodes! open succ)) ;; fix this, must return val or use mutable closed
-        ))))
+              succs (make-successor-nodes node)]
+          (put-closed closed node)
+          (add-to-buffers! succs)
+          ;; TODO add succs to appropriate buffer
+          )))))
 
 
 ;; https://stackoverflow.com/questions/42700407/immediately-kill-a-running-future-thread

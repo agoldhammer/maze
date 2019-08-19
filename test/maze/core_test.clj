@@ -21,16 +21,16 @@
     ;; loc parent g h
     (apply mb/->Node [[x y] [(inc x) y] g h])))
 
-(defn make-sequence-of-Nodes
+(defn make-vec-of-Nodes
   [n]
-  (repeatedly n make-dummy-Node))
+  (into [] (repeatedly n make-dummy-Node)))
 
 (defn make-test-pq
   "make a PriQ for testing"
   [n]
   (let [queue (mb/priority-queue 1000 mb/node-comp)
         pq (mb/->PriQ queue)]
-    (mb/add-nodes! pq (make-sequence-of-Nodes n))
+    (mb/add-nodes! pq (make-vec-of-Nodes n))
     pq))
 
 #_(deftest test-split-frontier
@@ -66,10 +66,13 @@
           buffer (nth buffers 0)
           in-tuple [[0 1] [0 0] 1 1]
           node (apply mb/->Node in-tuple)]
-      (mpar/put-buffer buffer node)
-      (let [out-node (mpar/buffer-next buffer)]
-        (is (= out-node node))
-        (is (nil? (mpar/buffer-next buffer)))))))
+      (mpar/put-buffer! buffer node)
+      (let [outvec (mpar/buffer->vec! buffer)]
+        (is (= [node] outvec))
+        (is (= [] (mpar/buffer->vec! buffer))))
+      (let [vec-of-nodes (make-vec-of-Nodes 4)]
+        (mpar/put-buffer! buffer vec-of-nodes)
+        (is (= 4 (count (mpar/buffer->vec! buffer))) "returned count shd equal inserted")))))
 
 (deftest test-get-open
   (testing "get open queue from thread mp")
