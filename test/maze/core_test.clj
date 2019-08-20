@@ -33,46 +33,22 @@
     (mb/add-nodes! pq (make-vec-of-Nodes n))
     pq))
 
-#_(deftest test-split-frontier
-  "splitting a frontier should produce PriQs of correct size"
-  (testing "frontier splitting"
-    (let [size 100
-          parts 4
-          new-frontiers (mc/split-frontier (make-test-pq size) parts)]
-      (println "new frontier types" (map type new-frontiers))
-      (is (every? #(= maze.core.PriQ %) (map type new-frontiers)))
-      (is (every? #(= 25 %) (map mc/countf new-frontiers)))))
-  ;; this should return 9 frontiers, 8 with count 12 and 1 with count 4
-  (let [size 100
-        parts 8
-        new-frontiers (mc/split-frontier (make-test-pq size) parts)]
-    (is (every? #(<= % 12) (map mc/countf new-frontiers)))))
+(defn test-algo
+  "distributed parallel astar algo
+    this fn is to be fed to create thread bodies"
+  [closed open thread-num]
+  (let [nodes (mpar/buffer->vec-of-nodes! (mpar/buffers @thread-num))]
+    ["thread: " @thread-num nodes]))
 
-(deftest test-thread-create
-  (testing "thread creation with node"
-    (let [start mb/start-node
-          thr (mpar/create-thread-params start)
-          pq (:open thr)
-          node (mb/get-next! pq)]
-      (is (= node start))))
-  (testing "thread creation empty"
-    (let [thr (mpar/create-thread-params)]
-      (is (mb/deserted? (:open thr))))))
-
-
-(deftest test-buffer-next-and-put-buffer
-  (testing "retrieve from buffer with something in it"
-    (let [buffers (mpar/create-buffers mp/nthreads)
-          buffer (nth buffers 0)
-          in-tuple [[0 1] [0 0] 1 1]
-          node (apply mb/->Node in-tuple)]
-      (mpar/put-buffer! buffer node)
-      (let [outvec (mpar/buffer->vec-of-nodes! buffer)]
-        (is (= [node] outvec))
-        (is (= [] (mpar/buffer->vec-of-nodes! buffer))))
-      (let [vec-of-nodes (make-vec-of-Nodes 4)]
-        (mpar/put-buffer! buffer vec-of-nodes)
-        (is (= 4 (count (mpar/buffer->vec-of-nodes! buffer))) "returned count shd equal inserted")))))
+(deftest test-threads
+  (testing "thread creation and buffer interaction"
+    (let [bodies (mpar/create-thread-bodies mp/nthreads test-algo)
+          vec-of-nodes (make-vec-of-Nodes 4)
+          _ (mpar/put-buffer! (mpar/buffers 0) vec-of-nodes)
+          results (into [] (map #(future %) bodies))
+          result0 (results 0)]
+      (is (= 0 (@result0 1)))
+      (is (= mp/nthreads (count (@result0 2)))) ) ))
 
 (deftest test-get-open
   (testing "get open queue from thread mp")
@@ -82,7 +58,7 @@
 
 (deftest test-create-expanders
   (testing 
-   "creates nthread expanders with start-node in proper receptacle"
+    "creates nthread expanders with start-node in proper receptacle"
     (let [start-node (mb/start-node)
           expanders (mpar/create-expanders mp/nthreads start-node)
           start-recipient (mpar/compute-recipient start-node)
@@ -107,3 +83,13 @@
         vec-of-nodes (make-vec-of-Nodes 10)]
     (mpar/add-to-buffers! buffers vec-of-nodes)
     (is (= (count vec-of-nodes) (reduce + (map #(count (deref %)) buffers))))))
+
+(deftest test-put-closed
+  (testing "add node to closed map in thread-local var closed"
+    (let [node (make-dummy-Node)
+          f (with-local-vars [closed (hash-map)]
+              (mpar/put-closed closed node)
+              @closed)
+          fut (future f)
+          loc (:loc node)]
+      (is (= node (get @fut loc) )))))

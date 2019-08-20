@@ -17,6 +17,12 @@
 
 (def buffers (create-buffers mp/nthreads))
 
+(defn get-buff
+  "return the nth buffer"
+  [n]
+  {:pre [(< n mp/nthreads) (> n 0)]}
+  (nth buffers n))
+
 (defn put-buffer!
   "put a node in buffer"
   [buffer node-or-nodes]
@@ -47,17 +53,28 @@
       (mb/add-nodes! pq node-or-nodes)
       (mb/add-nodes! pq [node-or-nodes]))))
 
+;; TODO deprecate; replace by macro below
 (defn create-thread-params
   "create the open and closed structures for a thread, w or w/o init"
-  ([]
-   (let [thr
-         {:open (mb/new-priq [] 1000)
-          :closed (hash-map)}]
-     thr))
-  ([node]
-   (let [thr (create-thread-params)]
-     (add-to-open-queue! thr node)
-     thr)))
+  []
+  (let [thr
+        {:open (atom (mb/new-priq [] 1000))
+         :closed (atom (hash-map))}]
+    thr))
+
+(defmacro setup-thread
+  "set up locals for ith thread; func shd be f(closed open thread-num)"
+  [i func]
+  `(with-local-vars [closed# (hash-map)
+                     open# (mb/new-priq [] 100)
+                     thread-num# ~i]
+     (~func closed# open# thread-num#)))
+
+(defn create-thread-bodies
+  "create n instances of code to run in future; func(closed, open, thread-num)"
+  [n func]
+  (into [] (for [i (range n)]
+            (setup-thread i func))))
 
 (defn create-expanders
   "helper for thread functions to expand nodes"
@@ -75,15 +92,10 @@
 
 (def incumbent-cost (atom Integer/MAX_VALUE))
 
-(defn add-to-closed
-  "add node to closed set"
-  [node closed]
-  (conj closed node))
-
 (defn make-successor-nodes
- "make successors to the current node"
- [node]
- (let [loc (.loc node)
+  "make successors to the current node"
+  [node]
+  (let [loc (.loc node)
        newg (inc (.g node))
        succs (mu/successors (.loc node))
        goal @mp/goal*]
@@ -99,10 +111,16 @@
          buff (nth buffers nbuff)]
      (put-buffer! buff node))))
 
-(defn put-closed
+(defmacro put-closed
   "add node to closed buffer"
   [closed node]
-  (assoc closed (.loc node) node))
+  `(var-set ~closed 
+    (assoc @~closed (.loc ~node) ~node)))
+
+(defmacro get-from-closed
+  "is node in closed?"
+  [closed node]
+  `(get @~closed (.loc ~node)))
 
 (defn expand-open
   "take next node from open Frontier on thread and expand it"
@@ -118,6 +136,32 @@
           ;; TODO add succs to appropriate buffer
           )))))
 
+(defn dpa
+  "distributed parallel astar algo
+    this fn is to be fed to create thread bodies"
+  [closed open thread-num]
+  (let [nodes (buffer->vec-of-nodes! (buffers @thread-num))]
+    ["thread: " @thread-num nodes])
+  )
+
+(defn terminate-detect
+  []
+  true)
+
+#_(def dpa
+    "distributed parallel astar algo"
+    (with-local-vars [open (mb/new-priq [] 1000)
+                    closed (hash-map)
+                    nbuff 0 ;; TODO need to set this properly when creating thread
+                    buffer (get-buff nbuff)]
+    (while (terminate-detect)
+      (let [nodes (buffer->vec-of-nodes! buffer)]
+        (doseq [node nodes]
+          (when-let [n' (get-from-closed closed node)]
+            ()))
+        ))
+    
+    ))
 
 ;; https://stackoverflow.com/questions/42700407/immediately-kill-a-running-future-thread
 #_(defn psearch-start

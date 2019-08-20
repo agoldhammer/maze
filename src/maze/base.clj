@@ -153,7 +153,8 @@
   (let [start @mp/start*]
     (new-priq [(->Node start nil 0 (calc-heuristic start @mp/goal*))] 1000)))
 
-#_(defn loc->Node
+;; TODO: remove later, used by unvisited cheaper succ, we don't use anymore
+(defn loc->Node
   "from loc, path, goal make N Node"
   [loc parent goal g-of-new-node]
   (let [heuristic (calc-heuristic loc goal)]
