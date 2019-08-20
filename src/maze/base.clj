@@ -5,7 +5,7 @@
 
 ;; Node type has field loc (location), parent, g (cost to node), and
 ;; h (heuristic); total cost f = g + h
-(deftype Node [loc parent g h])
+(defrecord Node [loc parent g h])
 
 (defn node->tuple
   "returns [loc parent g h] from Node"
