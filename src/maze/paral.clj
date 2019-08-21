@@ -15,7 +15,38 @@
   [n]
   (into [] (repeatedly n (partial ref #{}))))
 
+(defn create-counters
+  "send or receive counters for termination detection"
+  [n]
+  (atom 
+   (into [] (repeat n 0))))
+
+(def send-counters (create-counters mp/nthreads))
+(def recv-counters (create-counters mp/nthreads))
+
+(defn inc-counter
+  "inc the i-th counter of counters"
+  [send-or-recv-counters i num-nodes-sent-or-rcvd]
+  (swap! send-or-recv-counters #(assoc % i (+ num-nodes-sent-or-rcvd (nth % i)))))
+
+(defn sum-counters
+  "sum up all send or receive counters at time t for termination detection"
+  [send-or-recv-counters]
+  (reduce +  @send-or-recv-counters))
+
+(defn reset-counters
+  "reset both send and receive counters"
+  []
+  (let [counters [send-counters recv-counters]]
+    (doseq [counter counters]
+      (reset! counter @(create-counters mp/nthreads)))))
+
 (def buffers (create-buffers mp/nthreads))
+
+(defn reset-buffers
+  "reset all buffers"
+  []
+  (alter-var-root #'buffers (constantly (create-buffers mp/nthreads))))
 
 (defn get-buff
   "return the nth buffer"
@@ -23,21 +54,29 @@
   {:pre [(< n mp/nthreads) (> n 0)]}
   (nth buffers n))
 
-(defn put-buffer!
-  "put a node in buffer"
-  [buffer node-or-nodes]
-  (let [f (if (vector? node-or-nodes) concat conj)]
-    (dosync (alter buffer f node-or-nodes))))
+(defn put-buffer
+  "put a node or nodes in buffers[compute-recipient(node)], update send-counters[i]"
+  [node-or-nodes]
+  (let [is-vec? (vector? node-or-nodes)
+        nodes (if is-vec? node-or-nodes (vec node-or-nodes))]
+    (dosync
+      (doseq [node nodes]
+        (let [i (compute-recipient node)]
+          (inc-counter send-counters i 1)
+          (alter (nth buffers i) conj node))))))
 
 (defn buffer->vec-of-nodes!
-  "if buffer not empty, return contents as vector and reset; else return empty vec
-   buffer must be a ref (e.g. created by create-buffers)"
-  [buff]
+  "if buffer = buffers[i] not empty, return contents as vector and reset; else return empty vec
+   buffer must be a ref; update recv-counters[i] (e.g. created by create-buffers)"
+  [i]
   (dosync
-    (let [nodes (seq (ensure buff))
-          nodevec (into [] nodes)]
+    (let [buffer (nth buffers i)
+          nodes (seq (ensure buffer))
+          nodevec (into [] nodes)
+          cnt (count nodevec)]
+      (inc-counter recv-counters i cnt)
       (when nodes
-        (ref-set buff #{}))
+        (ref-set buffer #{}))
       nodevec)))
 
 (defn get-open
@@ -103,19 +142,11 @@
               (mb/->Node s loc newg (mb/calc-heuristic s goal))))
    ))
 
-(defn add-to-buffers!
- "given vec of nodes, for each node, compute destination buffer and add node to it "
- [buffers vec-of-nodes]
- (doseq [node vec-of-nodes]
-   (let [nbuff (compute-recipient node)
-         buff (nth buffers nbuff)]
-     (put-buffer! buff node))))
-
 (defmacro put-closed
   "add node to closed buffer"
   [closed node]
   `(var-set ~closed 
-    (assoc @~closed (.loc ~node) ~node)))
+            (assoc @~closed (.loc ~node) ~node)))
 
 (defmacro get-from-closed
   "is node in closed?"
@@ -132,7 +163,7 @@
         (let [node (mb/get-next! open)
               succs (make-successor-nodes node)]
           (put-closed closed node)
-          (add-to-buffers! buffers succs)
+          (put-buffer succs)
           ;; TODO add succs to appropriate buffer
           )))))
 
@@ -145,8 +176,13 @@
   )
 
 (defn terminate-detect
+  ;; see the cited paper
   []
-  true)
+  ;; decrement rcvd count to allow for initial message
+  (let [sent (sum-counters send-counters)
+        rcvd (sum-counters recv-counters)]
+    (and (> rcvd 0)
+         (= (dec rcvd) sent))))
 
 #_(def dpa
     "distributed parallel astar algo"

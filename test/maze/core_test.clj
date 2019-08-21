@@ -79,10 +79,11 @@
 
 (deftest test-buffer-load
   (testing "loading of buffers: count out should = count in")
-  (let [buffers (mpar/create-buffers mp/nthreads)
-        vec-of-nodes (make-vec-of-Nodes 10)]
-    (mpar/add-to-buffers! buffers vec-of-nodes)
-    (is (= (count vec-of-nodes) (reduce + (map #(count (deref %)) buffers))))))
+  (let [vec-of-nodes (make-vec-of-Nodes 100)]
+    (mpar/reset-counters)
+    (mpar/reset-buffers)
+    (mpar/put-buffer vec-of-nodes)
+    (is (= (count vec-of-nodes) (mpar/sum-counters mpar/send-counters)))))
 
 (deftest test-put-closed
   (testing "add node to closed map in thread-local var closed"
@@ -93,3 +94,13 @@
           fut (future f)
           loc (:loc node)]
       (is (= node (get @fut loc) )))))
+
+(deftest test-counters
+  (testing "send-receive counters"
+    (mpar/reset-counters)
+    (mpar/inc-counter mpar/send-counters 0 5)
+    (mpar/inc-counter mpar/send-counters 1 3)
+    (mpar/inc-counter mpar/recv-counters 1 2)
+    (mpar/inc-counter mpar/recv-counters 2 1)
+    (is (= 8 (mpar/sum-counters mpar/send-counters)))
+    (is (= 3 (mpar/sum-counters mpar/recv-counters)))))
