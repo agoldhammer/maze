@@ -37,37 +37,44 @@
   "distributed parallel astar algo
     this fn is to be fed to create thread bodies"
   [closed open thread-num]
-  (let [nodes (mpar/buffer->vec-of-nodes! (mpar/buffers @thread-num))]
-    ["thread: " @thread-num nodes]))
+  (let [nodes (mpar/buffer->vec-of-nodes! thread-num)]
+    (count nodes)))
+
+(defn test-algo2
+  [closed open thread-num]
+  (let [nodes (mpar/buffer->vec-of-nodes! thread-num)]
+    (when (seq nodes)
+      (mpar/put-closed closed (first nodes))))
+  @closed)
 
 (deftest test-threads
   (testing "thread creation and buffer interaction"
-    (let [bodies (mpar/create-thread-bodies mp/nthreads test-algo)
-          vec-of-nodes (make-vec-of-Nodes 4)
-          _ (mpar/put-buffer! (mpar/buffers 0) vec-of-nodes)
-          results (into [] (map #(future %) bodies))
-          result0 (results 0)]
-      (is (= 0 (@result0 1)))
-      (is (= mp/nthreads (count (@result0 2)))) ) ))
+    (mpar/reset-all)
+    (let [vec-of-nodes (make-vec-of-Nodes 4)
+          _ (mpar/put-buffer vec-of-nodes)
+          futs (mpar/create-futures mp/nthreads test-algo)
+          num-nodes-read (reduce + (map deref futs))]
+      (is (= 4 num-nodes-read)))))
 
-(deftest test-get-open
-  (testing "get open queue from thread mp")
-  (let [tp (mpar/create-thread-params)
-        pq (mpar/get-open tp)]
-    (is (not (nil? pq)))))
+(deftest test-threads2
+  (testing "get from buff and put in closed"
+    (mpar/reset-all)
+    ; start node needs to be set
+    (setup-trivial-maze)
+    (mpar/start-run)
+    (let [futs (mpar/create-futures mp/nthreads test-algo2)
+          vals (map deref futs)
+          snode (mb/start-node)]
+      (is (= {(:loc snode) snode} (first vals))))))
 
-(deftest test-create-expanders
-  (testing 
-    "creates nthread expanders with start-node in proper receptacle"
-    (let [start-node (mb/start-node)
-          expanders (mpar/create-expanders mp/nthreads start-node)
-          start-recipient (mpar/compute-recipient start-node)
-          nth-tp (nth expanders start-recipient)
-          pq (mpar/get-open nth-tp)]
-      (is (not (nil? pq)))
-      (is (< start-recipient (count expanders)) )
-      (is (not (nil? nth-tp)))
-      (is (= (mb/countf (mpar/get-open (nth expanders start-recipient))) 1) ))))
+(deftest test-put-closed
+  (testing "put closed"
+    (setup-trivial-maze)
+    (mpar/start-run)
+    (let [closed (atom {})
+          snode (mb/start-node)]
+      (mpar/put-closed closed snode)
+      (is (= snode @closed)))))
 
 (deftest test-trivial
   (testing "trivial maze"
@@ -80,8 +87,7 @@
 (deftest test-buffer-load
   (testing "loading of buffers: count out should = count in")
   (let [vec-of-nodes (make-vec-of-Nodes 100)]
-    (mpar/reset-counters)
-    (mpar/reset-buffers)
+    (mpar/reset-all)
     (mpar/put-buffer vec-of-nodes)
     (is (= (count vec-of-nodes) (mpar/sum-counters mpar/send-counters)))))
 

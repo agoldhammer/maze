@@ -92,19 +92,19 @@
     (mb/add-nodes! open node-or-nodes)
     (mb/add-nodes! open [node-or-nodes])))
 
-(defmacro setup-thread
-  "set up locals for ith thread; func shd be f(closed open thread-num)"
+(defmacro setup-future
+  "set up ith future"
   [i func]
-  `(let [closed# (atom (hash-map))
-         open# (atom (mb/new-priq [] 100))
-         thread-num# ~i]
-     (~func closed# open# thread-num#)))
+  `(future (let [closed# (atom (hash-map))
+                 open# (atom (mb/new-priq [] 100))
+                 thread-num# ~i]
+             (~func closed# open# thread-num#))))
 
 (defn create-futures
   "create n futures from setup-thread; func(closed, open, thread-num)"
   [n func]
-  ((let [fs (into [] (for [i (range n)] (setup-thread i func)))]
-     (map #(future %) fs))))
+  (into [] (for [i (range n)] (setup-future i func)))
+  )
 
 #_(defn create-expanders
   "helper for thread functions to expand nodes"
@@ -122,12 +122,11 @@
   "make successors to the current node"
   [node]
   (let [loc (.loc node)
-       newg (inc (.g node))
-       succs (mu/successors (.loc node))
-       goal @mp/goal*]
-   (into [] (for [s succs]
-              (mb/->Node s loc newg (mb/calc-heuristic s goal))))
-   ))
+        newg (inc (.g node))
+        succs (mu/successors (.loc node))
+        goal @mp/goal*]
+    (into [] (for [s succs]
+               (mb/->Node s loc newg (mb/calc-heuristic s goal))))))
 
 (defn put-closed
   "add node to closed buffer if loc not present or cost of new < cost old"
@@ -136,8 +135,8 @@
         loc (:loc node)
         oldn (get cl loc)]
     (if (or (nil? oldn) (< node oldn))
-      (swap! closed assoc loc node))
-    ))
+      (swap! closed assoc loc node)
+      closed)))
 
 (defmacro get-from-closed
   "is node in closed?"
@@ -192,19 +191,12 @@
     
     ))
 
-#_(defn make-threads
-  "make threads to run dpa algo"
-  []
-  (let [bodies (create-thread-bodies mp/nthreads dpa)
-        results (into [] (map #(future %) bodies))]
-    results))
-
 (defn start-run
   "start the run by placing start node in buffers[0]"
   []
   (let [snode (mb/start-node)]
     (dosync
-     (alter (buffers 0) conj snode))) )
+      (alter (buffers 0) conj snode))) )
 
 ;; https://stackoverflow.com/questions/42700407/immediately-kill-a-running-future-thread
 #_(defn psearch-start
@@ -227,8 +219,6 @@
                (println "Found: Path length: " (count path))
                (mc/print-maze-params)))
            (println "No path was found"))))))
-
-
 
 #_(defn par-astar-search-maze
   "start-frontier is a priority queue of Node types"
