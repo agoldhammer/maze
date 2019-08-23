@@ -48,7 +48,13 @@
   []
   (alter-var-root #'buffers (constantly (create-buffers mp/nthreads))))
 
-(defn get-buff
+(defn reset-all
+  "reset buffers and counters"
+  []
+  (reset-buffers)
+  (reset-counters))
+
+#_(defn get-buff
   "return the nth buffer"
   [n]
   {:pre [(< n mp/nthreads) (> n 0)]}
@@ -79,43 +85,28 @@
         (ref-set buffer #{}))
       nodevec)))
 
-(defn get-open
-  "return the open queue from threat params tp"
-  [tp]
-  (:open tp))
-
 (defn add-to-open-queue!
   "add nodes to open queue"
-  [thread-params node-or-nodes]
-  (let [pq (get-open thread-params)]
-    (if (vector? node-or-nodes)
-      (mb/add-nodes! pq node-or-nodes)
-      (mb/add-nodes! pq [node-or-nodes]))))
-
-;; TODO deprecate; replace by macro below
-(defn create-thread-params
-  "create the open and closed structures for a thread, w or w/o init"
-  []
-  (let [thr
-        {:open (atom (mb/new-priq [] 1000))
-         :closed (atom (hash-map))}]
-    thr))
+  [open node-or-nodes]
+  (if (vector? node-or-nodes)
+    (mb/add-nodes! open node-or-nodes)
+    (mb/add-nodes! open [node-or-nodes])))
 
 (defmacro setup-thread
   "set up locals for ith thread; func shd be f(closed open thread-num)"
   [i func]
-  `(with-local-vars [closed# (hash-map)
-                     open# (mb/new-priq [] 100)
-                     thread-num# ~i]
+  `(let [closed# (atom (hash-map))
+         open# (atom (mb/new-priq [] 100))
+         thread-num# ~i]
      (~func closed# open# thread-num#)))
 
-(defn create-thread-bodies
-  "create n instances of code to run in future; func(closed, open, thread-num)"
+(defn create-futures
+  "create n futures from setup-thread; func(closed, open, thread-num)"
   [n func]
-  (into [] (for [i (range n)]
-            (setup-thread i func))))
+  ((let [fs (into [] (for [i (range n)] (setup-thread i func)))]
+     (map #(future %) fs))))
 
-(defn create-expanders
+#_(defn create-expanders
   "helper for thread functions to expand nodes"
   [n start-node]
   (let [thread-params (vec (repeatedly mp/nthreads create-thread-params))
@@ -124,10 +115,6 @@
     thread-params))
 
 (def terminate-flag (atom false))
-
-(defn keep-going?
-  []
-  (not @terminate-flag))
 
 (def incumbent-cost (atom Integer/MAX_VALUE))
 
@@ -142,11 +129,15 @@
               (mb/->Node s loc newg (mb/calc-heuristic s goal))))
    ))
 
-(defmacro put-closed
-  "add node to closed buffer"
+(defn put-closed
+  "add node to closed buffer if loc not present or cost of new < cost old"
   [closed node]
-  `(var-set ~closed 
-            (assoc @~closed (.loc ~node) ~node)))
+  (let [cl @closed
+        loc (:loc node)
+        oldn (get cl loc)]
+    (if (or (nil? oldn) (< node oldn))
+      (swap! closed assoc loc node))
+    ))
 
 (defmacro get-from-closed
   "is node in closed?"
@@ -167,22 +158,24 @@
           ;; TODO add succs to appropriate buffer
           )))))
 
-(defn dpa
-  "distributed parallel astar algo
-    this fn is to be fed to create thread bodies"
-  [closed open thread-num]
-  (let [nodes (buffer->vec-of-nodes! (buffers @thread-num))]
-    ["thread: " @thread-num nodes])
-  )
-
 (defn terminate-detect
   ;; see the cited paper
   []
   ;; decrement rcvd count to allow for initial message
   (let [sent (sum-counters send-counters)
-        rcvd (sum-counters recv-counters)]
-    (and (> rcvd 0)
-         (= (dec rcvd) sent))))
+        rcvd (dec (sum-counters recv-counters))]
+    (not (and (> rcvd 0)
+              (= rcvd sent)))))
+
+(defn dpa
+  "distributed parallel astar algo
+    this fn is to be fed to create thread bodies"
+  [closed open thread-num]
+  (while (terminate-detect)
+    (let [nodes (buffer->vec-of-nodes! (buffers thread-num))]
+      (when nodes
+        (println nodes))))
+  )
 
 #_(def dpa
     "distributed parallel astar algo"
@@ -198,6 +191,20 @@
         ))
     
     ))
+
+#_(defn make-threads
+  "make threads to run dpa algo"
+  []
+  (let [bodies (create-thread-bodies mp/nthreads dpa)
+        results (into [] (map #(future %) bodies))]
+    results))
+
+(defn start-run
+  "start the run by placing start node in buffers[0]"
+  []
+  (let [snode (mb/start-node)]
+    (dosync
+     (alter (buffers 0) conj snode))) )
 
 ;; https://stackoverflow.com/questions/42700407/immediately-kill-a-running-future-thread
 #_(defn psearch-start
