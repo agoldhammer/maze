@@ -60,16 +60,23 @@
   {:pre [(< n mp/nthreads) (> n 0)]}
   (nth buffers n))
 
+(defn put-vec-to-buffer
+  "put a vector of nodes in buffers[compute-recipient(node)], update send-counters[i]"
+  [nodes]
+  {:pre [(vector? nodes)]}
+  (dosync
+   (doseq [node nodes]
+     (let [i (compute-recipient node)]
+       (inc-counter send-counters i 1)
+       (alter (nth buffers i) conj node)))))
+
 (defn put-buffer
-  "put a node or nodes in buffers[compute-recipient(node)], update send-counters[i]"
-  [node-or-nodes]
-  (let [is-vec? (vector? node-or-nodes)
-        nodes (if is-vec? node-or-nodes (vec node-or-nodes))]
-    (dosync
-      (doseq [node nodes]
-        (let [i (compute-recipient node)]
-          (inc-counter send-counters i 1)
-          (alter (nth buffers i) conj node))))))
+  "put a node in buffer[compute-recipient(node)]"
+  [node]
+  (dosync
+   (let [i (compute-recipient node)]
+     (inc-counter send-counters i 1)
+     (alter (buffers i) conj node))))
 
 (defn buffer->vec-of-nodes!
   "if buffer = buffers[i] not empty, return contents as vector and reset; else return empty vec
@@ -84,6 +91,16 @@
       (when nodes
         (ref-set buffer #{}))
       nodevec)))
+
+(defn take-buffer
+  "get and remove first node from numbered buffer; return nil if buffer empty"
+  [buffer-num]
+  (dosync
+   (let [buff (buffers buffer-num)
+         node (first (ensure buff))]
+     (when node
+       (alter buff disj node))
+     node)))
 
 (defn add-to-open-queue!
   "add nodes to open queue"
@@ -176,6 +193,13 @@
         (println nodes))))
   )
 
+;; dpa development version, using dotimes instead of while
+(defn xdpa
+  [closed open thread-num]
+  (dotimes [t 1]
+    (put-buffer thread-num))
+  )
+
 #_(def dpa
     "distributed parallel astar algo"
     (with-local-vars [open (mb/new-priq [] 1000)
@@ -191,12 +215,11 @@
     
     ))
 
-(defn start-run
+(defn init-run
   "start the run by placing start node in buffers[0]"
   []
   (let [snode (mb/start-node)]
-    (dosync
-      (alter (buffers 0) conj snode))) )
+    (put-buffer snode)) )
 
 ;; https://stackoverflow.com/questions/42700407/immediately-kill-a-running-future-thread
 #_(defn psearch-start
