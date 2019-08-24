@@ -102,3 +102,19 @@
     (mpar/inc-counter mpar/recv-counters 2 1)
     (is (= 8 (mpar/sum-counters mpar/send-counters)))
     (is (= 3 (mpar/sum-counters mpar/recv-counters)))))
+
+(deftest test-closed-functions
+  (testing "functions dealing with closed map"
+    (let [closed (atom {})
+          node (make-dummy-Node)]
+      (mpar/put-closed closed node)
+      (is (= node (mpar/find-in-closed closed node)))
+      (mpar/remove-from-closed closed node)
+      (is (nil? (mpar/find-in-closed closed node))))))
+
+(deftest test-open-functions
+  (testing "open functions"
+    (let [open (mb/new-priq [] 100)
+          node (make-dummy-Node)]
+      (mpar/put-open open node)
+      (is (= node (mb/quickpeek open))))))

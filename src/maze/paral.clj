@@ -102,18 +102,18 @@
        (alter buff disj node))
      node)))
 
-(defn add-to-open-queue!
-  "add nodes to open queue"
-  [open node-or-nodes]
-  (if (vector? node-or-nodes)
-    (mb/add-nodes! open node-or-nodes)
-    (mb/add-nodes! open [node-or-nodes])))
+;; !!! This is a mutating function, might want to find another way
+(defn put-open
+  "add node to open (priority) queue"
+  [open node]
+  (mb/add-nodes! open [node]))
 
 (defmacro setup-future
   "set up ith future"
   [i func]
   `(future (let [closed# (atom (hash-map))
-                 open# (atom (mb/new-priq [] 100))
+                 ;; don't need atom here because priq is mutable
+                 open# (mb/new-priq [] 100)
                  thread-num# ~i]
              (~func closed# open# thread-num#))))
 
@@ -122,14 +122,6 @@
   [n func]
   (into [] (for [i (range n)] (setup-future i func)))
   )
-
-#_(defn create-expanders
-  "helper for thread functions to expand nodes"
-  [n start-node]
-  (let [thread-params (vec (repeatedly mp/nthreads create-thread-params))
-        start-recipient (compute-recipient start-node)]
-    (add-to-open-queue! (nth thread-params start-recipient) start-node)
-    thread-params))
 
 (def terminate-flag (atom false))
 
@@ -146,19 +138,20 @@
                (mb/->Node s loc newg (mb/calc-heuristic s goal))))))
 
 (defn put-closed
-  "add node to closed buffer if loc not present or cost of new < cost old"
+  "add node to closed buffer"
   [closed node]
-  (let [cl @closed
-        loc (:loc node)
-        oldn (get cl loc)]
-    (if (or (nil? oldn) (< node oldn))
-      (swap! closed assoc loc node)
-      closed)))
+  (swap! closed assoc (:loc node) node))
 
-(defmacro get-from-closed
-  "is node in closed?"
+(defn remove-from-closed
+  "remove node from the closed map"
   [closed node]
-  `(get @~closed (.loc ~node)))
+  (swap! closed dissoc (:loc node)))
+
+(defn find-in-closed
+  "return node if in closed, nil otherwise"
+  [closed node]
+  (let [loc (:loc node)]
+    (get @closed loc)))
 
 (defn expand-open
   "take next node from open Frontier on thread and expand it"
@@ -197,8 +190,14 @@
 (defn xdpa
   [closed open thread-num]
   (dotimes [t 1]
-    (put-buffer thread-num))
-  )
+    (if-let [n' (take-buffer thread-num)]
+      (if-let [oldn (find-in-closed closed n')]
+        (let [g1 (:g n')
+              oldg (:g oldn)]
+          (when (< g1 oldg)
+            (remove-from-closed closed oldn)
+            (put-open open n'))))
+      )))
 
 #_(def dpa
     "distributed parallel astar algo"
