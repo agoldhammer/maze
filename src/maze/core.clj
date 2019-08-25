@@ -173,10 +173,13 @@
   #_(start-bfs-search)
   #_(start-dfs-search))
 
+(defn get-proj-dir
+  []
+  (str (System/getProperty "user.dir") "/"))
 
 (defn save-maze
   [fname]
-  (let [f (clojure.java.io/file (str fname ".maz"))]
+  (let [f (clojure.java.io/file (str (get-proj-dir) fname ".maz"))]
     (nippy/freeze-to-file f {:start @mp/start*
                              :goal @mp/goal*
                              :size @mp/size*
@@ -185,7 +188,7 @@
 
 (defn read-maze
   [fname]
-  (let [f (clojure.java.io/file (str fname ".maz"))
+  (let [f (clojure.java.io/file (str (get-proj-dir) fname ".maz"))
         parms (nippy/thaw-from-file f)]
     (reset! mp/start* (:start parms))
     (reset! mp/goal* (:goal parms))

@@ -190,7 +190,7 @@
 (def log-agent (agent nil))
 
 (defn log [thread-num & mesg]
-  (send log-agent #(println (apply str thread-num " " mesg) %)))
+  (send log-agent #(println (clojure.string/join " " (concat (str thread-num) mesg)) %)))
 
 ;; dpa development version, using dotimes instead of while
 (defn xdpa

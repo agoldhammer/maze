@@ -7,7 +7,7 @@
 
 (defn setup-trivial-maze
   []
-  (mc/read-maze "/home/agold/Prog/maze/trivial4"))
+  (mc/read-maze "trivial4"))
 
 #_(use-fixtures :once setup-trivial-maze )
 
@@ -32,6 +32,12 @@
         pq (mb/->PriQ queue)]
     (mb/add-nodes! pq (make-vec-of-Nodes n))
     pq))
+
+(defn setup-trivial-test
+  []
+  (mpar/reset-all)
+  (setup-trivial-maze)
+  (mpar/init-run))
 
 (defn test-algo
   "distributed parallel astar algo
@@ -86,9 +92,7 @@
 
 (deftest test-get-buffer
   (testing "testing get from numbered buffer"
-    (mpar/reset-all)
-    (setup-trivial-maze)
-    (mpar/init-run)
+    (setup-trivial-test)
     (let [nodes (into [] (map mpar/take-buffer (range mp/nthreads)))
           start-in-buff? (some #(= (mb/start-node) %) nodes)]
       (is (true? start-in-buff?)))))
@@ -121,9 +125,7 @@
 
 (deftest test-initial-load
   (testing "loading of start node into open queue"
-    (mpar/reset-all)
-    (setup-trivial-maze)
-    (mpar/init-run)
+    (setup-trivial-test)
     (let [futs (mpar/create-futures mp/nthreads mpar/xdpa)]
       ;; start node of trivial maze lands in buffer[3]
       (is (= (mb/start-node) @(futs 3))))))
