@@ -6,9 +6,10 @@
 ;; implementing algos from Fukunga, Botea, et al.
 
 (defn compute-recipient
-  "compute recipient of Node based on has of its .loc"
+  "compute recipient of Node based on hash of its .loc
+    Want all nodes with same loc to be processed by same thread"
   [node]
-  (mod (hash node) mp/nthreads))
+  (mod (hash (:loc node)) mp/nthreads))
 
 (defn create-buffers
   "create n buffers to receive nodes"
@@ -186,18 +187,28 @@
         (println nodes))))
   )
 
+(def log-agent (agent nil))
+
+(defn log [thread-num & mesg]
+  (send log-agent #(println (apply str thread-num " " mesg) %)))
+
 ;; dpa development version, using dotimes instead of while
 (defn xdpa
   [closed open thread-num]
   (dotimes [t 1]
-    (if-let [n' (take-buffer thread-num)]
-      (if-let [oldn (find-in-closed closed n')]
-        (let [g1 (:g n')
-              oldg (:g oldn)]
-          (when (< g1 oldg)
-            (remove-from-closed closed oldn)
-            (put-open open n'))))
-      )))
+    (when-let [n' (take-buffer thread-num)]
+      (do
+        (log thread-num n')
+        (if-let [oldn (find-in-closed closed n')]
+          (let [g1 (:g n')
+                oldg (:g oldn)]
+            (when (< g1 oldg)
+              (remove-from-closed closed oldn)))
+          (do
+            (log thread-num "putting open" n')
+            (put-open open n'))))))
+
+  (mb/quickpeek open))
 
 #_(def dpa
     "distributed parallel astar algo"

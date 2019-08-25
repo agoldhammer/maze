@@ -118,3 +118,12 @@
           node (make-dummy-Node)]
       (mpar/put-open open node)
       (is (= node (mb/quickpeek open))))))
+
+(deftest test-initial-load
+  (testing "loading of start node into open queue"
+    (mpar/reset-all)
+    (setup-trivial-maze)
+    (mpar/init-run)
+    (let [futs (mpar/create-futures mp/nthreads mpar/xdpa)]
+      ;; start node of trivial maze lands in buffer[3]
+      (is (= (mb/start-node) @(futs 3))))))
