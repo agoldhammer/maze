@@ -111,7 +111,8 @@
    (let [buff (buffers buffer-num)
          node (first (ensure buff))]
      (when node
-       (alter buff disj node))
+       (alter buff disj node)
+       (inc-counter recv-counters buffer-num 1))
      node)))
 
 ;; !!! This is a mutating function, might want to find another way
@@ -191,12 +192,12 @@
 (defn log [thread-num & mesg]
   (send log-agent #(println (clojure.string/join " " (concat (str thread-num) mesg)) %)))
 
-(defn terminate-detect
-  ;; see the cited paper
+(defn keep-going ;; see the cited paper
   []
-  (when goal-hit
+  (if @goal-hit
     (let [[sent rcvd] (sum-counters) ]
-      (not= rcvd sent))))
+      (not= rcvd sent))
+    true))
 
 (defn intake-from-buff
   [closed open thread-num]
@@ -216,7 +217,7 @@
   "distributed parallel astar algo
     this fn is to be fed to create thread bodies"
   [closed open thread-num]
-  (while (terminate-detect)
+  (while (keep-going)
     (intake-from-buff closed open thread-num)
     (expand-open closed open))
   :terminated
