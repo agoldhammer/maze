@@ -88,7 +88,7 @@
   (let [vec-of-nodes (make-vec-of-Nodes 100)]
     (mpar/reset-all)
     (mpar/put-vec-to-buffer vec-of-nodes)
-    (is (= (count vec-of-nodes) (mpar/sum-counters mpar/send-counters)))))
+    (is (= [(count vec-of-nodes) 0] (mpar/sum-counters)))))
 
 (deftest test-get-buffer
   (testing "testing get from numbered buffer"
@@ -104,8 +104,7 @@
     (mpar/inc-counter mpar/send-counters 1 3)
     (mpar/inc-counter mpar/recv-counters 1 2)
     (mpar/inc-counter mpar/recv-counters 2 1)
-    (is (= 8 (mpar/sum-counters mpar/send-counters)))
-    (is (= 3 (mpar/sum-counters mpar/recv-counters)))))
+    (is (= [8 3] (mpar/sum-counters)))))
 
 (deftest test-closed-functions
   (testing "functions dealing with closed map"
@@ -129,3 +128,30 @@
     (let [futs (mpar/create-futures mp/nthreads mpar/xdpa)]
       ;; start node of trivial maze lands in buffer[3]
       (is (= (mb/start-node) @(futs 3))))))
+
+(defn xdpa1
+  [closed open thread-num]
+  (dotimes [t 1]
+    (when-let [n' (mpar/take-buffer thread-num)]
+      (do
+        #_(log thread-num n')
+        (if-let [oldn (mpar/find-in-closed closed n')]
+          (let [g1 (:g n')
+                oldg (:g oldn)]
+            (when (< g1 oldg)
+              (mpar/remove-from-closed closed oldn)))
+          (do
+            #_(log thread-num "putting open" n')
+            (mpar/put-open open n'))))))
+
+  (mb/quickpeek open))
+
+(deftest test-xdpa1
+  (testing "one time through thread with trivial maze"
+    (setup-trivial-test)
+    (mpar/init-run)
+    (let [futs (mpar/create-futures mp/nthreads xdpa1)]
+      (is (= (mb/start-node) @(futs 3)))
+      (is (= [0 0 0 2] @mpar/send-counters))
+      (is (= [0 0 0 0] @mpar/recv-counters))
+      (is (= [2 0] (mpar/sum-counters))))))

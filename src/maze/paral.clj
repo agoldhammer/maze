@@ -24,28 +24,32 @@
 (defn create-counters
   "send or receive counters for termination detection"
   [n]
-  (atom 
-   (into [] (repeat n 0))))
+  (into [] (repeat n 0)))
 
-(def send-counters (create-counters mp/nthreads))
-(def recv-counters (create-counters mp/nthreads))
+(def send-counters (ref (create-counters mp/nthreads)))
+(def recv-counters (ref (create-counters mp/nthreads)))
 
 (defn inc-counter
   "inc the i-th counter of counters"
   [send-or-recv-counters i num-nodes-sent-or-rcvd]
-  (swap! send-or-recv-counters #(assoc % i (+ num-nodes-sent-or-rcvd (nth % i)))))
+  (dosync
+    (let [count (nth @send-or-recv-counters i)]
+      (alter send-or-recv-counters #(assoc % i (+ num-nodes-sent-or-rcvd count))))))
 
 (defn sum-counters
   "sum up all send or receive counters at time t for termination detection"
-  [send-or-recv-counters]
-  (reduce +  @send-or-recv-counters))
+  []
+  (dosync
+    (let [send-count (reduce +  (ensure send-counters))
+          recv-count (reduce + (ensure recv-counters))]
+      [send-count recv-count])))
 
 (defn reset-counters
   "reset both send and receive counters"
   []
-  (let [counters [send-counters recv-counters]]
-    (doseq [counter counters]
-      (reset! counter @(create-counters mp/nthreads)))))
+  (dosync
+    (ref-set send-counters (create-counters mp/nthreads))
+    (ref-set recv-counters (create-counters mp/nthreads))))
 
 (def buffers (create-buffers mp/nthreads))
 
@@ -191,8 +195,7 @@
   ;; see the cited paper
   []
   (when goal-hit
-    (let [sent (sum-counters send-counters)
-          rcvd (sum-counters recv-counters)]
+    (let [[sent rcvd] (sum-counters) ]
       (not= rcvd sent))))
 
 (defn intake-from-buff
