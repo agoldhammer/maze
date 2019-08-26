@@ -1,9 +1,14 @@
 (ns maze.paral
   (:require [maze.params :as mp]
             [maze.utils :as mu]
-            [maze.base :as mb]))
+            [maze.base :as mb]
+            [maze.overlay :as mo]))
 
 ;; implementing algos from Fukunga, Botea, et al.
+
+(def incumbent-cost (atom Integer/MAX_VALUE))
+
+(def goal-hit (atom nil))
 
 (defn compute-recipient
   "compute recipient of Node based on hash of its .loc
@@ -52,6 +57,8 @@
 (defn reset-all
   "reset buffers and counters"
   []
+  (swap! incumbent-cost (constantly Integer/MAX_VALUE))
+  (swap! goal-hit (constantly nil))
   (reset-buffers)
   (reset-counters))
 
@@ -126,17 +133,18 @@
 
 (def terminate-flag (atom false))
 
-(def incumbent-cost (atom Integer/MAX_VALUE))
+
 
 (defn make-successor-nodes
   "make successors to the current node"
   [node]
   (let [loc (.loc node)
         newg (inc (.g node))
-        succs (mu/successors (.loc node))
+        succs (mu/successors loc)
         goal @mp/goal*]
+    ;; using whole node as parent, not just its .loc
     (into [] (for [s succs]
-               (mb/->Node s loc newg (mb/calc-heuristic s goal))))))
+               (mb/->Node s node newg (mb/calc-heuristic s goal))))))
 
 (defn put-closed
   "add node to closed buffer"
@@ -154,43 +162,64 @@
   (let [loc (:loc node)]
     (get @closed loc)))
 
+
+
 (defn expand-open
   "take next node from open Frontier on thread and expand it"
-  [open closed]
-  (if-let [testnode (mb/quickpeek open)]
-    (let [current-cost (mb/node-total-cost testnode)]
-      (if (> current-cost @incumbent-cost)
-        nil
-        (let [node (mb/get-next! open)
-              succs (make-successor-nodes node)]
-          (put-closed closed node)
-          (put-buffer succs)
-          ;; TODO add succs to appropriate buffer
-          )))))
+  [closed open]
+  (when (not (nil? (mb/quickpeek open)))
+    (let [node (mb/get-next! open)
+          current-cost (mb/node-total-cost node)]
+      (put-closed closed node)
+      (when (mu/at-goal? (:loc node))
+        (when (< current-cost @incumbent-cost)
+          (do
+            (swap! goal-hit (constantly node))
+            (swap! incumbent-cost (constantly current-cost)))))
+      (let [succs (make-successor-nodes node)]
+        (doseq [succ succs]
+          (put-buffer succ))
+            ;; TODO add succs to appropriate buffer
+        ))))
+
+(def log-agent (agent nil))
+
+(defn log [thread-num & mesg]
+  (send log-agent #(println (clojure.string/join " " (concat (str thread-num) mesg)) %)))
 
 (defn terminate-detect
   ;; see the cited paper
   []
-  ;; decrement rcvd count to allow for initial message
-  (let [sent (sum-counters send-counters)
-        rcvd (dec (sum-counters recv-counters))]
-    (not (and (> rcvd 0)
-              (= rcvd sent)))))
+  (when goal-hit
+    (let [sent (sum-counters send-counters)
+          rcvd (sum-counters recv-counters)]
+      (not= rcvd sent))))
+
+(defn intake-from-buff
+  [closed open thread-num]
+  (when-let [n' (take-buffer thread-num)]
+    (do
+      #_(log thread-num n')
+      (if-let [oldn (find-in-closed closed n')]
+        (let [g1 (:g n')
+              oldg (:g oldn)]
+          (when (< g1 oldg)
+            (remove-from-closed closed oldn)))
+        (do
+          #_(log thread-num "putting open" n')
+          (put-open open n'))))))
 
 (defn dpa
   "distributed parallel astar algo
     this fn is to be fed to create thread bodies"
   [closed open thread-num]
   (while (terminate-detect)
-    (let [nodes (buffer->vec-of-nodes! (buffers thread-num))]
-      (when nodes
-        (println nodes))))
+    (intake-from-buff closed open thread-num)
+    (expand-open closed open))
+  :terminated
   )
 
-(def log-agent (agent nil))
 
-(defn log [thread-num & mesg]
-  (send log-agent #(println (clojure.string/join " " (concat (str thread-num) mesg)) %)))
 
 ;; dpa development version, using dotimes instead of while
 (defn xdpa
@@ -229,41 +258,49 @@
   "start the run by placing start node in buffers[0]"
   []
   (let [snode (mb/start-node)]
-    (put-buffer snode)) )
+    (put-buffer snode)))
+
+(defn pextract-path
+  [goal-node]
+  (loop [path []
+         node goal-node]
+    (if (nil? node)
+      path
+      (recur (conj path (:loc node)) (:parent node)))))
 
 ;; https://stackoverflow.com/questions/42700407/immediately-kill-a-running-future-thread
-#_(defn psearch-start
+(defn psearch-start
   "start a new || astar search; print path overlaid result if doprint is true"
   ([]
    (psearch-start true))
   ([doprint]
-   (send max-frontier-size (constantly 0) 0)
-   (let [start-node (mc/astar-start)
-         buffers (create-buffers nthreads)]
-     (while (keep-going?)
-       )
-     #_(let [{:keys [found]} (par-astar-search-maze start-node @goal* false)]
-         (if found
-           (do
-             (let [path (mc/extract-path)]
-               (when doprint
-                 (doseq [ln (mc/a-overlay-path path)]
-                   (println ln)))
-               (println "Found: Path length: " (count path))
-               (mc/print-maze-params)))
-           (println "No path was found"))))))
+   (reset-all)
+   (init-run)
+   (println "Searching maze")
+   (let [rets (create-futures mp/nthreads dpa)]
+     (println (map #(deref % 10000 :timedout) rets)))
+   (let [path (pextract-path @goal-hit)]
+     (if (= @incumbent-cost Integer/MAX_VALUE)
+       (println "No path found")
+       (if doprint 
+         (do
+           (doseq [ln (mo/a-overlay-path path)]
+             (println ln))
+           (println "Found: Path length: " (count path))
+           (mu/print-maze-params))
+         (println "Path length:" (count path)))))))
 
 #_(defn par-astar-search-maze
-  "start-frontier is a priority queue of Node types"
-  [start-frontier goal is-subsearch?]
-  (when (not is-subsearch?) (println "Starting parallel search"))
-  (loop [frontier start-frontier]
-    (send max-frontier-size max (mb/countf frontier))
-    (if (and (not is-subsearch?)
-             (>= (countf frontier) split-frontier-at))
-      (let [new-frontiers (split-frontier frontier nthreads)
-            ;; _ (println "new frons" new-frontiers)
-            ;; _ (println "counts" (map countf new-frontiers))
+    "start-frontier is a priority queue of Node types"
+    [start-frontier goal is-subsearch?]
+    (when (not is-subsearch?) (println "Starting parallel search"))
+    (loop [frontier start-frontier]
+      (send max-frontier-size max (mb/countf frontier))
+      (if (and (not is-subsearch?)
+               (>= (countf frontier) split-frontier-at))
+        (let [new-frontiers (split-frontier frontier nthreads)
+              ;; _ (println "new frons" new-frontiers)
+              ;; _ (println "counts" (map countf new-frontiers))
             sub-results (pmap #(par-astar-search-maze % goal true) new-frontiers)
             ;; _ (doseq [i (range (count new-frontiers))]
              ;;   (println "ith front" i (par-astar-search-maze (nth new-frontiers (inc i)) goal true) "done"))

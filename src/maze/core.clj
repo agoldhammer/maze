@@ -3,7 +3,8 @@
             [maze.params :as mp]
             [maze.base :as mb]
             [maze.overlay :as mo]
-            [maze.utils :as mu :refer [make-maze]])
+            [maze.utils :as mu :refer [make-maze]]
+            [maze.paral :as mpar :refer [psearch-start]])
   (:gen-class))
 
 (def DEBUG 0)
@@ -195,6 +196,10 @@
     (reset! mp/size* (:size parms))
     (reset! mp/maze* (:maze parms)))
   (println "Read maze" fname))
+
+(defn psearch
+  []
+  (psearch-start))
 
 (defn -main
   "I don't do a whole lot ... yet."
