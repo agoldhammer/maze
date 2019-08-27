@@ -51,6 +51,7 @@
   "sum up all send or receive counters at time t for termination detection"
   []
   (dosync
+   (map ensure counters)
    (reduce + (map deref counters))))
 
 (defn reset-buffers
@@ -92,9 +93,8 @@
   "put a vector of nodes in buffers[compute-recipient(node)], update send-counters[i]"
   [nodes]
   {:pre [(vector? nodes)]}
-  (dosync
-   (doseq [node nodes]
-     (put-buffer node))))
+  (doseq [node nodes]
+    (put-buffer node)))
 
 (defn take-buffer
   "get and remove first node from numbered buffer; return nil if buffer empty"
@@ -159,7 +159,7 @@
 (defn expand-open
   "take next node from open Frontier on thread and expand it"
   [closed open thread-num]
-  (when (not (nil? (mb/quickpeek open)))
+  (when (not (mb/deserted? open))
     (let [node (mb/get-next! open)
           current-cost (mb/node-total-cost node)]
       (put-closed closed node)
@@ -178,7 +178,7 @@
 (defn log [thread-num & mesg]
   (send log-agent #(println (clojure.string/join " " (concat (str thread-num) mesg)) %)))
 
-(defn keep-going ;; see the cited paper
+(defn keep-going? ;; see the cited paper
   []
   ;; if at goal, continue if counter balance is positive, stop if 0
   ;; if not at goal, continue
@@ -206,7 +206,8 @@
   "distributed parallel astar algo
     this fn is to be fed to create thread bodies"
   [closed open thread-num]
-  (while (keep-going)
+  (while (or (not (mb/deserted? open))
+             (keep-going?))
     (intake-from-buff closed open thread-num)
     (expand-open closed open thread-num))
   :terminated
@@ -255,7 +256,8 @@
    (init-run)
    (println "Searching maze")
    (let [rets (create-futures mp/nthreads dpa)]
-     (println (map #(deref % 10000 :timedout) rets)))
+     (println (map #(deref % 5000 :timedout) rets))
+     (map future-cancel rets))
    (let [path (pextract-path @goal-hit)]
      (if (= @incumbent-cost Integer/MAX_VALUE)
        (println "No path found")
