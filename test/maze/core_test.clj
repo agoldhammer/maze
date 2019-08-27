@@ -43,24 +43,26 @@
   "distributed parallel astar algo
     this fn is to be fed to create thread bodies"
   [closed open thread-num]
-  (let [nodes (mpar/buffer->vec-of-nodes! thread-num)]
-    (count nodes)))
+  (let [i (atom 0)]
+    (while (mpar/take-buffer thread-num)
+      (swap! i inc))
+    @i))
 
 (defn test-algo2
   [closed open thread-num]
-  (let [nodes (mpar/buffer->vec-of-nodes! thread-num)]
-    (when (seq nodes)
-      (mpar/put-closed closed (first nodes))))
+  (let [node (mpar/take-buffer thread-num)]
+    (when node
+      (mpar/put-closed closed node)))
   @closed)
 
 (deftest test-threads
   (testing "thread creation and buffer interaction"
     (mpar/reset-all)
-    (let [vec-of-nodes (make-vec-of-Nodes 4)
+    (let [vec-of-nodes (make-vec-of-Nodes 100)
           _ (mpar/put-vec-to-buffer vec-of-nodes)
           futs (mpar/create-futures mp/nthreads test-algo)
           num-nodes-read (reduce + (map deref futs))]
-      (is (= 4 num-nodes-read)))))
+      (is (= 100 num-nodes-read)))))
 
 (deftest test-threads2
   (testing "get from buff and put in closed"
@@ -113,6 +115,7 @@
       (mpar/put-open open node)
       (is (= node (mb/quickpeek open))))))
 
+;; this test will fail if mp/nthreads != 4
 (deftest test-initial-load
   (testing "loading of start node into open queue"
     (setup-trivial-test)
@@ -120,29 +123,8 @@
     (is (= (mb/start-node) (first @(mpar/buffers 3))))
     (let [futs (mpar/create-futures mp/nthreads mpar/xdpa)]
       ;; start node of trivial maze lands in buffer[3] when mp/nthreads=4
-      (is (= (mb/start-node) (nth (mapv deref futs) 3))))))
+      (is (= [true true true true] (mapv deref futs)))
+      (is (= [1 1 1 0] (mapv #(count (deref %)) mpar/buffers)))
+      (is (= [1 1 1 0] (mapv deref mpar/counters))))))
 
-(defn xdpa1
-  [closed open thread-num]
-  (dotimes [t 1]
-    (when-let [n' (mpar/take-buffer thread-num)]
-      (do
-        #_(log thread-num n')
-        (if-let [oldn (mpar/find-in-closed closed n')]
-          (let [g1 (:g n')
-                oldg (:g oldn)]
-            (when (< g1 oldg)
-              (mpar/remove-from-closed closed oldn)))
-          (do
-            #_(log thread-num "putting open" n')
-            (mpar/put-open open n'))))))
 
-  (mb/quickpeek open))
-
-(deftest test-xdpa1
-  (testing "one time through thread with trivial maze"
-    (setup-trivial-test)
-    (mpar/init-run)
-    (let [futs (mpar/create-futures mp/nthreads mpar/xdpa)]
-      (is (= (mb/start-node) @(futs 3)))
-      (is (= 0 (mpar/balance-counters))))))

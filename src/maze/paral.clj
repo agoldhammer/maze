@@ -156,8 +156,6 @@
   (let [loc (:loc node)]
     (get @closed loc)))
 
-
-
 (defn expand-open
   "take next node from open Frontier on thread and expand it"
   [closed open thread-num]
@@ -214,8 +212,6 @@
   :terminated
   )
 
-
-
 ;; dpa development version, using dotimes instead of while
 (defn xdpa
   [closed open thread-num]
@@ -224,24 +220,9 @@
     (do
       #_(log thread-num "calling intake")
       (intake-from-buff closed open thread-num)
-      #_(expand-open closed open thread-num)))
-  (mb/quickpeek open)
+      (expand-open closed open thread-num)))
+  (mb/deserted? open)
   #_[closed open thread-num])
-
-#_(def dpa
-    "distributed parallel astar algo"
-    (with-local-vars [open (mb/new-priq [] 1000)
-                      closed (hash-map)
-                      nbuff 0 ;; TODO need to set this properly when creating thread
-                      buffer (get-buff nbuff)]
-    (while (terminate-detect)
-      (let [nodes (buffer->vec-of-nodes! buffer)]
-        (doseq [node nodes]
-          (when-let [n' (get-from-closed closed node)]
-            ()))
-        ))
-    
-    ))
 
 (defn init-run
   "start the run by placing start node in buffers[0]"
