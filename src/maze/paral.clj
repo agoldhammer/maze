@@ -6,9 +6,11 @@
 
 ;; implementing algos from Fukunga, Botea, et al.
 
-(def incumbent-cost (atom Integer/MAX_VALUE))
+(def incumbent (atom {:node nil :cost Integer/MAX_VALUE}))
 
-(def goal-hit (atom nil))
+#_(def incumbent-cost (atom Integer/MAX_VALUE))
+
+#_(def goal-hit (atom nil))
 
 (defn compute-recipient
   "compute recipient of Node based on hash of its .loc
@@ -67,8 +69,7 @@
 (defn reset-all
   "reset buffers and counters"
   []
-  (swap! incumbent-cost (constantly Integer/MAX_VALUE))
-  (swap! goal-hit (constantly nil))
+  (swap! incumbent assoc {:cost Integer/MAX_VALUE :node nil})
   (reset-buffers)
   (reset-counters))
 
@@ -164,14 +165,11 @@
           current-cost (mb/node-total-cost node)]
       (put-closed closed node)
       (if (mu/at-goal? (:loc node))
-        (when (< current-cost @incumbent-cost)
-          (swap! goal-hit (constantly node))
-          (swap! incumbent-cost (constantly current-cost)))
+        (when (< current-cost (:cost @incumbent))
+          (swap! incumbent assoc {:cost current-cost :node node}))
         (let [succs (make-successor-nodes node)]
           (doseq [succ succs]
-            (put-buffer succ))
-          ;; TODO add succs to appropriate buffer
-          )))))
+            (put-buffer succ)))))))
 
 (def log-agent (agent nil))
 
@@ -182,7 +180,7 @@
   []
   ;; if at goal, continue if counter balance is positive, stop if 0
   ;; if not at goal, continue
-  (if @goal-hit
+  (if (:node @incumbent)
     (pos? (balance-counters))
     true))
 
@@ -258,8 +256,8 @@
    (let [rets (create-futures mp/nthreads dpa)]
      (println (map #(deref % 5000 :timedout) rets))
      (map future-cancel rets))
-   (let [path (pextract-path @goal-hit)]
-     (if (= @incumbent-cost Integer/MAX_VALUE)
+   (let [path (pextract-path (:node @incumbent))]
+     (if (= {:cost @incumbent} Integer/MAX_VALUE)
        (println "No path found")
        (if doprint 
          (do
