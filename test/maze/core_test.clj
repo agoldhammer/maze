@@ -88,7 +88,7 @@
   (let [vec-of-nodes (make-vec-of-Nodes 100)]
     (mpar/reset-all)
     (mpar/put-vec-to-buffer vec-of-nodes)
-    (is (= [(count vec-of-nodes) 0] (mpar/sum-counters)))))
+    (is (= (count vec-of-nodes) (mpar/balance-counters)))))
 
 (deftest test-get-buffer
   (testing "testing get from numbered buffer"
@@ -96,15 +96,6 @@
     (let [nodes (into [] (map mpar/take-buffer (range mp/nthreads)))
           start-in-buff? (some #(= (mb/start-node) %) nodes)]
       (is (true? start-in-buff?)))))
-
-(deftest test-counters
-  (testing "send-receive counters"
-    (mpar/reset-counters)
-    (mpar/inc-counter mpar/send-counters 0 5)
-    (mpar/inc-counter mpar/send-counters 1 3)
-    (mpar/inc-counter mpar/recv-counters 1 2)
-    (mpar/inc-counter mpar/recv-counters 2 1)
-    (is (= [8 3] (mpar/sum-counters)))))
 
 (deftest test-closed-functions
   (testing "functions dealing with closed map"
@@ -150,8 +141,6 @@
   (testing "one time through thread with trivial maze"
     (setup-trivial-test)
     (mpar/init-run)
-    (let [futs (mpar/create-futures mp/nthreads xdpa1)]
+    (let [futs (mpar/create-futures mp/nthreads mpar/xdpa)]
       (is (= (mb/start-node) @(futs 3)))
-      (is (= [0 0 0 2] @mpar/send-counters))
-      (is (= [0 0 0 0] @mpar/recv-counters))
-      (is (= [2 0] (mpar/sum-counters))))))
+      (is (= 0 (mpar/balance-counters))))))

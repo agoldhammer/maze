@@ -19,44 +19,49 @@
 (defn create-buffers
   "create n buffers to receive nodes"
   [n]
-  (into [] (repeatedly n (partial ref #{}))))
+  (mapv ref (repeat n #{})))
 
 (defn create-counters
   "send or receive counters for termination detection"
   [n]
-  (into [] (repeat n 0)))
+  (mapv ref (repeat n 0)))
 
-(def send-counters (ref (create-counters mp/nthreads)))
-(def recv-counters (ref (create-counters mp/nthreads)))
+#_(def send-counters (ref (create-counters mp/nthreads)))
+#_(def recv-counters (ref (create-counters mp/nthreads)))
 
-(defn inc-counter
+#_(defn inc-counter
   "inc the i-th counter of counters"
   [send-or-recv-counters i num-nodes-sent-or-rcvd]
   (dosync
     (let [count (nth @send-or-recv-counters i)]
       (alter send-or-recv-counters #(assoc % i (+ num-nodes-sent-or-rcvd count))))))
 
-(defn sum-counters
-  "sum up all send or receive counters at time t for termination detection"
-  []
-  (dosync
-    (let [send-count (reduce +  (ensure send-counters))
-          recv-count (reduce + (ensure recv-counters))]
-      [send-count recv-count])))
-
-(defn reset-counters
-  "reset both send and receive counters"
-  []
-  (dosync
-    (ref-set send-counters (create-counters mp/nthreads))
+#_(defn reset-counters
+    "reset both send and receive counters"
+    []
+    (dosync
+      (ref-set send-counters (create-counters mp/nthreads))
     (ref-set recv-counters (create-counters mp/nthreads))))
 
 (def buffers (create-buffers mp/nthreads))
+
+(def counters (create-counters mp/nthreads))
+
+(defn balance-counters
+  "sum up all send or receive counters at time t for termination detection"
+  []
+  (dosync
+   (reduce + (map deref counters))))
 
 (defn reset-buffers
   "reset all buffers"
   []
   (alter-var-root #'buffers (constantly (create-buffers mp/nthreads))))
+
+(defn reset-counters
+  "reset all counters"
+  []
+  (alter-var-root #'counters (constantly (create-counters mp/nthreads))))
 
 (defn reset-all
   "reset buffers and counters"
@@ -72,48 +77,36 @@
   {:pre [(< n mp/nthreads) (> n 0)]}
   (nth buffers n))
 
+(defn put-buffer
+  "put a node in buffer[compute-recipient(node)]"
+  [node]
+  (dosync
+    (let [i (compute-recipient node)
+         buffer (buffers i)
+         counter (counters i)]
+     ;; can't have side effects in sync!!!
+     (alter counter inc)
+     (alter buffer conj node))))
+
 (defn put-vec-to-buffer
   "put a vector of nodes in buffers[compute-recipient(node)], update send-counters[i]"
   [nodes]
   {:pre [(vector? nodes)]}
   (dosync
    (doseq [node nodes]
-     (let [i (compute-recipient node)]
-       (inc-counter send-counters i 1)
-       (alter (nth buffers i) conj node)))))
-
-(defn put-buffer
-  "put a node in buffer[compute-recipient(node)]"
-  [node]
-  (dosync
-   (let [i (compute-recipient node)]
-     (inc-counter send-counters i 1)
-     (alter (buffers i) conj node))))
-
-(defn buffer->vec-of-nodes!
-  "if buffer = buffers[i] not empty, return contents as vector and reset; else return empty vec
-   buffer must be a ref; update recv-counters[i] (e.g. created by create-buffers)"
-  [i]
-  (dosync
-    (let [buffer (nth buffers i)
-          nodes (seq (ensure buffer))
-          nodevec (into [] nodes)
-          cnt (count nodevec)]
-      (inc-counter recv-counters i cnt)
-      (when nodes
-        (ref-set buffer #{}))
-      nodevec)))
+     (put-buffer node))))
 
 (defn take-buffer
   "get and remove first node from numbered buffer; return nil if buffer empty"
   [buffer-num]
   (dosync
-   (let [buff (buffers buffer-num)
-         node (first (ensure buff))]
-     (when node
-       (alter buff disj node)
-       (inc-counter recv-counters buffer-num 1))
-     node)))
+    (let [buffer (buffers buffer-num)
+          counter (counters buffer-num)
+          node (first (ensure buffer))]
+      (when node
+        (alter buffer disj node)
+        (alter counter dec))
+      node)))
 
 ;; !!! This is a mutating function, might want to find another way
 (defn put-open
@@ -135,10 +128,6 @@
   [n func]
   (into [] (for [i (range n)] (setup-future i func)))
   )
-
-(def terminate-flag (atom false))
-
-
 
 (defn make-successor-nodes
   "make successors to the current node"
@@ -171,21 +160,20 @@
 
 (defn expand-open
   "take next node from open Frontier on thread and expand it"
-  [closed open]
+  [closed open thread-num]
   (when (not (nil? (mb/quickpeek open)))
     (let [node (mb/get-next! open)
           current-cost (mb/node-total-cost node)]
       (put-closed closed node)
-      (when (mu/at-goal? (:loc node))
+      (if (mu/at-goal? (:loc node))
         (when (< current-cost @incumbent-cost)
-          (do
-            (swap! goal-hit (constantly node))
-            (swap! incumbent-cost (constantly current-cost)))))
-      (let [succs (make-successor-nodes node)]
-        (doseq [succ succs]
-          (put-buffer succ))
-            ;; TODO add succs to appropriate buffer
-        ))))
+          (swap! goal-hit (constantly node))
+          (swap! incumbent-cost (constantly current-cost)))
+        (let [succs (make-successor-nodes node)]
+          (doseq [succ succs]
+            (put-buffer succ))
+          ;; TODO add succs to appropriate buffer
+          )))))
 
 (def log-agent (agent nil))
 
@@ -194,9 +182,10 @@
 
 (defn keep-going ;; see the cited paper
   []
+  ;; if at goal, continue if counter balance is positive, stop if 0
+  ;; if not at goal, continue
   (if @goal-hit
-    (let [[sent rcvd] (sum-counters) ]
-      (not= rcvd sent))
+    (pos? (balance-counters))
     true))
 
 (defn intake-from-buff
@@ -208,18 +197,19 @@
         (let [g1 (:g n')
               oldg (:g oldn)]
           (when (< g1 oldg)
-            (remove-from-closed closed oldn)))
-        (do
-          #_(log thread-num "putting open" n')
-          (put-open open n'))))))
+            (remove-from-closed closed oldn)
+            (put-open open n')))
+        (put-open open n'))))
+  [closed open thread-num])
 
 (defn dpa
   "distributed parallel astar algo
     this fn is to be fed to create thread bodies"
   [closed open thread-num]
   (while (keep-going)
-    (intake-from-buff closed open thread-num)
-    (expand-open closed open))
+    (apply expand-open 
+      (intake-from-buff closed open thread-num))
+    #_(expand-open closed open thread-num))
   :terminated
   )
 
@@ -232,23 +222,16 @@
     (when-let [n' (take-buffer thread-num)]
       (do
         (log thread-num n')
-        (if-let [oldn (find-in-closed closed n')]
-          (let [g1 (:g n')
-                oldg (:g oldn)]
-            (when (< g1 oldg)
-              (remove-from-closed closed oldn)))
-          (do
-            (log thread-num "putting open" n')
-            (put-open open n'))))))
-
+        (intake-from-buff closed open thread-num)
+        (expand-open closed open thread-num))))
   (mb/quickpeek open))
 
 #_(def dpa
     "distributed parallel astar algo"
     (with-local-vars [open (mb/new-priq [] 1000)
-                    closed (hash-map)
-                    nbuff 0 ;; TODO need to set this properly when creating thread
-                    buffer (get-buff nbuff)]
+                      closed (hash-map)
+                      nbuff 0 ;; TODO need to set this properly when creating thread
+                      buffer (get-buff nbuff)]
     (while (terminate-detect)
       (let [nodes (buffer->vec-of-nodes! buffer)]
         (doseq [node nodes]
@@ -261,8 +244,15 @@
 (defn init-run
   "start the run by placing start node in buffers[0]"
   []
+  (reset-all)
   (let [snode (mb/start-node)]
     (put-buffer snode)))
+
+(defn pstatus
+  []
+  (clojure.string/join ": " (list
+                             (str "Buffers: " (mapv deref buffers))
+                             (str "counters: " (mapv deref counters)))))
 
 (defn pextract-path
   [goal-node]
