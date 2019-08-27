@@ -69,7 +69,7 @@
 (defn reset-all
   "reset buffers and counters"
   []
-  (swap! incumbent assoc {:cost Integer/MAX_VALUE :node nil})
+  (swap! incumbent merge {:cost Integer/MAX_VALUE :node nil})
   (reset-buffers)
   (reset-counters))
 
@@ -166,7 +166,7 @@
       (put-closed closed node)
       (if (mu/at-goal? (:loc node))
         (when (< current-cost (:cost @incumbent))
-          (swap! incumbent assoc {:cost current-cost :node node}))
+          (swap! incumbent merge {:cost current-cost :node node}))
         (let [succs (make-successor-nodes node)]
           (doseq [succ succs]
             (put-buffer succ)))))))
@@ -204,8 +204,7 @@
   "distributed parallel astar algo
     this fn is to be fed to create thread bodies"
   [closed open thread-num]
-  (while (or (not (mb/deserted? open))
-             (keep-going?))
+  (while (keep-going?)
     (intake-from-buff closed open thread-num)
     (expand-open closed open thread-num))
   :terminated
@@ -232,7 +231,7 @@
 
 (defn pstatus
   []
-  (clojure.string/join ": " (list
+  (clojure.string/join "\n" (list
                              (str "Buffers: " (mapv deref buffers))
                              (str "counters: " (mapv deref counters)))))
 
@@ -266,79 +265,3 @@
            (println "Found: Path length: " (count path))
            (mu/print-maze-params))
          (println "Path length:" (count path)))))))
-
-#_(defn par-astar-search-maze
-    "start-frontier is a priority queue of Node types"
-    [start-frontier goal is-subsearch?]
-    (when (not is-subsearch?) (println "Starting parallel search"))
-    (loop [frontier start-frontier]
-      (send max-frontier-size max (mb/countf frontier))
-      (if (and (not is-subsearch?)
-               (>= (countf frontier) split-frontier-at))
-        (let [new-frontiers (split-frontier frontier nthreads)
-              ;; _ (println "new frons" new-frontiers)
-              ;; _ (println "counts" (map countf new-frontiers))
-            sub-results (pmap #(par-astar-search-maze % goal true) new-frontiers)
-            ;; _ (doseq [i (range (count new-frontiers))]
-             ;;   (println "ith front" i (par-astar-search-maze (nth new-frontiers (inc i)) goal true) "done"))
-            
-            ]
-        (println "subresults" sub-results)
-        (if (every? not (map :found sub-results))
-          {:found false}
-          {:found true}))
-      ;; else
-      (if (deserted? frontier)
-        {:found false};
-        ; else
-        (let [working-node (get-next! frontier)
-              loc (.loc working-node)
-              parent (.parent working-node)]
-          (if (at-goal? loc)
-            (dosync
-             (alter a-visited* assoc loc {:cost nil :parent parent})
-             {:found true})
-            ; else, want to expand nod if new or cheaper than on prev visit to this loc
-            (let [action (dosync
-                          (let [current-f (node-total-cost working-node)
-                                old-f (:cost (get (ensure a-visited*) loc nil))
-                                state (cond
-                                        (nil? old-f) :new
-                                        (< current-f old-f) :cheaper
-                                        :else :old)]
-                            (when (= state :new)
-                              (alter a-visited* assoc loc
-                                     {:cost current-f :parent parent}))
-                            (when (= state :cheaper)
-                              (alter a-visited* dissoc loc))
-                            #_(println "new or ch" new-or-cheaper?)
-                            state))]
-              (when (= action :cheaper) ;; need to redo working-node with new cheaper cost
-                (add-nodes! frontier [working-node]))
-              (when (= action :new)  ;; add in children if new or ceaper
-                (let [new-g (inc (.g working-node))
-                      unvisited (unvisited-cheaper-successors loc goal new-g)]
-                  #_(println "unvisited" (count unvisited))
-                  (add-nodes! frontier unvisited))
-                #_(println "frontier" frontier))
-              
-              (recur frontier))))))))
-
-#_(defn par-start-astar-search
-  "start a new astar search; print path overlaid result if doprint is true"
-  ([]
-   (par-start-astar-search true))
-  ([doprint]
-   (dosync (ref-set mp/a-visited* (hash-map)))
-   (send max-frontier-size (constantly 0) 0)
-   (let [start-node (mc/astar-start)]
-     (let [{:keys [found]} (par-astar-search-maze start-node @goal* false)]
-       (if found
-         (do
-           (let [path (mc/extract-path)]
-             (when doprint
-               (doseq [ln (mc/a-overlay-path path)]
-                 (println ln)))
-             (println "Found: Path length: " (count path))
-             (mc/print-maze-params)))
-         (println "No path was found"))))))
