@@ -116,9 +116,11 @@
 (deftest test-initial-load
   (testing "loading of start node into open queue"
     (setup-trivial-test)
+    (mpar/init-run)
+    (is (= (mb/start-node) (first @(mpar/buffers 3))))
     (let [futs (mpar/create-futures mp/nthreads mpar/xdpa)]
-      ;; start node of trivial maze lands in buffer[3]
-      (is (= (mb/start-node) @(futs 3))))))
+      ;; start node of trivial maze lands in buffer[3] when mp/nthreads=4
+      (is (= (mb/start-node) (nth (mapv deref futs) 3))))))
 
 (defn xdpa1
   [closed open thread-num]

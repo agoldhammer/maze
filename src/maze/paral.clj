@@ -190,15 +190,17 @@
 
 (defn intake-from-buff
   [closed open thread-num]
+  #_(log thread-num "intake")
   (when-let [n' (take-buffer thread-num)]
-    (do
-      #_(log thread-num n')
-      (if-let [oldn (find-in-closed closed n')]
-        (let [g1 (:g n')
-              oldg (:g oldn)]
-          (when (< g1 oldg)
-            (remove-from-closed closed oldn)
-            (put-open open n')))
+    #_(log thread-num "non-nil take" n')
+    (if-let [oldn (find-in-closed closed n')]
+      (let [g1 (:g n')
+            oldg (:g oldn)]
+        (when (< g1 oldg)
+          (remove-from-closed closed oldn)
+          (put-open open n')))
+      (do 
+        #_(log thread-num "Putting" n')
         (put-open open n'))))
   [closed open thread-num])
 
@@ -207,9 +209,8 @@
     this fn is to be fed to create thread bodies"
   [closed open thread-num]
   (while (keep-going)
-    (apply expand-open 
-      (intake-from-buff closed open thread-num))
-    #_(expand-open closed open thread-num))
+    (intake-from-buff closed open thread-num)
+    (expand-open closed open thread-num))
   :terminated
   )
 
@@ -219,12 +220,13 @@
 (defn xdpa
   [closed open thread-num]
   (dotimes [t 1]
-    (when-let [n' (take-buffer thread-num)]
-      (do
-        (log thread-num n')
-        (intake-from-buff closed open thread-num)
-        (expand-open closed open thread-num))))
-  (mb/quickpeek open))
+    (log thread-num "starting")
+    (do
+      #_(log thread-num "calling intake")
+      (intake-from-buff closed open thread-num)
+      #_(expand-open closed open thread-num)))
+  (mb/quickpeek open)
+  #_[closed open thread-num])
 
 #_(def dpa
     "distributed parallel astar algo"
