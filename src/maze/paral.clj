@@ -18,15 +18,28 @@
   [node]
   (mod (hash (:loc node)) mp/nthreads))
 
-(defn create-buffers
+(def buffers [])
+(def clocks [])
+(def counters [])
+(def tmaxes [])
+
+(defmacro create-thing
+  [n create-fn init-val]
+  `(mapv ~create-fn (repeat ~n ~init-val)))
+
+#_(defn create-buffers
   "create n buffers to receive nodes"
   [n]
   (mapv ref (repeat n #{})))
 
-(defn create-counters
+#_(defn create-counters
   "send or receive counters for termination detection"
   [n]
   (mapv ref (repeat n 0)))
+
+#_(defn create-clocks
+  [n]
+  (mapv atom (repeat n 0)))
 
 #_(def send-counters (ref (create-counters mp/nthreads)))
 #_(def recv-counters (ref (create-counters mp/nthreads)))
@@ -45,9 +58,14 @@
       (ref-set send-counters (create-counters mp/nthreads))
     (ref-set recv-counters (create-counters mp/nthreads))))
 
-(def buffers (create-buffers mp/nthreads))
-
-(def counters (create-counters mp/nthreads))
+(comment 
+ (def buffers (create-thing mp/nthreads ref #{}))
+ 
+ (def counters (create-thing mp/nthreads ref 0))
+ 
+ (def clocks (create-thing mp/nthreads atom 0))
+ 
+ (def tmaxes (create-thing mp/nthreads atom 0)))
 
 (defn balance-counters
   "sum up all send or receive counters at time t for termination detection"
@@ -56,57 +74,79 @@
    (map ensure counters)
    (reduce + (map deref counters))))
 
-(defn reset-buffers
-  "reset all buffers"
-  []
-  (alter-var-root #'buffers (constantly (create-buffers mp/nthreads))))
+(comment 
+ (defn reset-buffers
+   "reset all buffers"
+   []
+   (alter-var-root #'buffers (constantly (create-buffers mp/nthreads))))
+ 
+ (defn reset-counters
+   "reset all counters"
+   []
+   (alter-var-root #'counters (constantly (create-counters mp/nthreads))))
+ 
+ (defn reset-clocks
+   "reset all clocks"
+   []
+   (alter-var-root #'clocks (constantly (create-counters mp/nthreads)))))
 
-(defn reset-counters
-  "reset all counters"
+#_(defn reset-all
+  "reset buffers and counters"
   []
-  (alter-var-root #'counters (constantly (create-counters mp/nthreads))))
+  (swap! incumbent merge {:cost Integer/MAX_VALUE :node nil})
+  (reset-buffers)
+  (reset-counters)
+  (reset-clocks))
 
 (defn reset-all
   "reset buffers and counters"
   []
   (swap! incumbent merge {:cost Integer/MAX_VALUE :node nil})
-  (reset-buffers)
-  (reset-counters))
+  (doseq [[sym create-fn init] [[#'buffers ref #{}] [#'counters ref 0]
+                                [#'clocks atom 0] [#'tmaxes atom 0]]]
+    (alter-var-root sym (constantly (create-thing mp/nthreads create-fn init)))))
 
 #_(defn get-buff
   "return the nth buffer"
   [n]
   {:pre [(< n mp/nthreads) (> n 0)]}
   (nth buffers n))
-
+;; puts and takes to thread buffer are 'timestamped messages' in the sense of Mattern paper
+;; A mesg is a vector [CLOCK, node]
+;; this is SEND in Mattern's terminology
 (defn put-buffer
-  "put a node in buffer[compute-recipient(node)]"
-  [node]
+  "put a node from thread 'sender' (thread-num) in buffer[compute-recipient(node)]"
+  [node sender]
   (dosync
-    (let [i (compute-recipient node)
-         buffer (buffers i)
-         counter (counters i)]
+    (let [receiver (compute-recipient node)
+          buffer (buffers receiver)
+          counter (counters sender)
+          clock (clocks sender)]
      ;; can't have side effects in sync!!!
-     (alter counter inc)
-     (alter buffer conj node))))
+      (swap! clock inc)
+      (alter counter inc)
+      (alter buffer conj [@clock node]))))
 
 (defn put-vec-to-buffer
   "put a vector of nodes in buffers[compute-recipient(node)], update send-counters[i]"
-  [nodes]
+  [nodes sender]
   {:pre [(vector? nodes)]}
   (doseq [node nodes]
-    (put-buffer node)))
+    (put-buffer node sender)))
 
 (defn take-buffer
   "get and remove first node from numbered buffer; return nil if buffer empty"
-  [buffer-num]
+  [receiver]
   (dosync
-    (let [buffer (buffers buffer-num)
-          counter (counters buffer-num)
-          node (first (ensure buffer))]
+    (let [buffer (buffers receiver)
+          counter (counters receiver)
+          tmax (tmaxes receiver)
+          msg (first (ensure buffer))
+          [tstamp node] msg ]
       (when node
-        (alter buffer disj node)
-        (alter counter dec))
+        (alter buffer disj msg)
+        (alter counter dec)
+        (swap! tmax max tstamp))
       node)))
 
 ;; !!! This is a mutating function, might want to find another way
@@ -169,14 +209,15 @@
           (swap! incumbent merge {:cost current-cost :node node}))
         (let [succs (make-successor-nodes node)]
           (doseq [succ succs]
-            (put-buffer succ)))))))
+            (put-buffer succ thread-num)))))))
 
 (def log-agent (agent nil))
 
 (defn log [thread-num & mesg]
   (send log-agent #(println (clojure.string/join " " (concat (str thread-num) mesg)) %)))
 
-(defn keep-going? ;; see the cited paper
+;; for details of termination algorithm, see Mattern 1987 paper, section 6, p. 166
+(defn keep-going? 
   []
   ;; if at goal, continue if counter balance is positive, stop if 0
   ;; if not at goal, continue
@@ -227,7 +268,7 @@
   []
   (reset-all)
   (let [snode (mb/start-node)]
-    (put-buffer snode)))
+    (put-buffer snode 0)))
 
 (defn pstatus
   []
