@@ -22,6 +22,9 @@
 (def clocks [])
 (def counters [])
 (def tmaxes [])
+(def ctrl-msgs [])
+(def ctrl-wave-in-progress? (atom false))
+(def should-terminate? (atom false))
 
 (defmacro create-thing
   [n create-fn init-val]
@@ -102,8 +105,11 @@
   "reset buffers and counters"
   []
   (swap! incumbent merge {:cost Integer/MAX_VALUE :node nil})
-  (doseq [[sym create-fn init] [[#'buffers ref #{}] [#'counters ref 0]
-                                [#'clocks atom 0] [#'tmaxes atom 0]]]
+  (swap! ctrl-wave-in-progress? (constantly false))
+  (swap! should-terminate? (constantly false))
+  (doseq [[sym create-fn init] [[#'buffers atom #{}] [#'counters atom 0]
+                                [#'clocks atom 0] [#'tmaxes atom 0]
+                                [#'ctrl-msgs atom []]]]
     (alter-var-root sym (constantly (create-thing mp/nthreads create-fn init)))))
 
 #_(defn get-buff
@@ -115,17 +121,17 @@
 ;; A mesg is a vector [CLOCK, node]
 ;; this is SEND in Mattern's terminology
 (defn put-buffer
-  "put a node from thread 'sender' (thread-num) in buffer[compute-recipient(node)]"
+  "put a node from thread 'sender' (thread-num) in buffer[compute-recipient(node)]
+    update counter and clock for the sender"
   [node sender]
-  (dosync
-    (let [receiver (compute-recipient node)
-          buffer (buffers receiver)
-          counter (counters sender)
-          clock (clocks sender)]
-     ;; can't have side effects in sync!!!
-      (swap! clock inc)
-      (alter counter inc)
-      (alter buffer conj [@clock node]))))
+  (let [receiver (compute-recipient node)
+        buffer (buffers receiver)
+        counter (counters sender)
+        clock (clocks sender)]
+    ;; implements send portion of Mattern protocol, lines 1-2, p. 166
+    (swap! clock inc)
+    (swap! counter inc)
+    (swap! buffer conj [@clock node])))
 
 (defn put-vec-to-buffer
   "put a vector of nodes in buffers[compute-recipient(node)], update send-counters[i]"
@@ -135,19 +141,22 @@
     (put-buffer node sender)))
 
 (defn take-buffer
-  "get and remove first node from numbered buffer; return nil if buffer empty"
+  "get and remove first node from numbered buffer; return nil if buffer empty;
+    update counter and tmax for the receiver"
   [receiver]
-  (dosync
-    (let [buffer (buffers receiver)
-          counter (counters receiver)
-          tmax (tmaxes receiver)
-          msg (first (ensure buffer))
-          [tstamp node] msg ]
-      (when node
-        (alter buffer disj msg)
-        (alter counter dec)
-        (swap! tmax max tstamp))
-      node)))
+  ;; a msg is a vector [tstamp node], per Mattern paper
+  (let [buffer (buffers receiver)
+        counter (counters receiver)
+        tmax (tmaxes receiver)
+        msg (first @buffer)
+        [tstamp node] msg ]
+    ;; tmax for the receiver is set to max of tmax and time stamp
+    ;; counter is decremented to register receipt
+    (when node
+      (swap! buffer disj msg)
+      (swap! counter dec)
+      (swap! tmax max tstamp))
+    node))
 
 ;; !!! This is a mutating function, might want to find another way
 (defn put-open
@@ -216,14 +225,70 @@
 (defn log [thread-num & mesg]
   (send log-agent #(println (clojure.string/join " " (concat (str thread-num) mesg)) %)))
 
+(defn next-recip
+  "return the next agent to receive a control message"
+  [j]
+  (let [next-thread (mod (inc j) mp/nthreads)]
+    (ctrl-msgs next-thread)))
+
+;; Mattern p 167 steps 13-14
+(defn initiate-ctrl-wave
+  "initiate control wave from thread j"
+  [j]
+  (swap! ctrl-wave-in-progress? (constantly true))
+  (let [clock (swap! (clocks j) inc)
+        count @(counters j)
+        msg [clock count false j]]
+    (swap! (next-recip j) conj msg)))
+
+(defn process-ctrl-msg
+  "process control msg from thread j"
+  [j]
+  ;; msg format is [time accu invalid init
+  (let [rcvr (ctrl-msgs j)]
+    (if-let [msg (peek @rcvr)]
+      (do
+        (swap! rcvr pop)
+        (let [clock (clocks j)
+              [time accu invalid init] msg]
+          #_(println "rcvd msg" msg "init" init)
+          (swap! clock max time)
+          ;; check for complete round
+          (if (= init j)
+            (do
+              (swap! ctrl-wave-in-progress? (constantly false))
+              (if (and (zero? accu)
+                       (not invalid))
+                :terminated
+                :continue))
+            (let [count @(counters j)
+                  tmax @(tmaxes j)
+                  new-invalid (or invalid (>= tmax time))]
+              #_(println "sending to" (next-recip j))
+              (swap! (next-recip j) conj [time (+ accu count) new-invalid init])
+              :continue))))
+      :continue)))
+
 ;; for details of termination algorithm, see Mattern 1987 paper, section 6, p. 166
-(defn keep-going? 
-  []
-  ;; if at goal, continue if counter balance is positive, stop if 0
-  ;; if not at goal, continue
-  (if (:node @incumbent)
-    (pos? (balance-counters))
-    true))
+(defn keep-going?
+  [_ open thread-num]
+  ;; if at goal and no control wave in progress, initiate one
+  ;; if control wave in progress, read message
+  (if (or (not (mb/deserted? open))
+          (pos? (count @(buffers thread-num))))
+    true
+    (if (:node @incumbent)
+      (if @ctrl-wave-in-progress? ;; at goal
+        (let [flag (process-ctrl-msg thread-num)]
+          (if (= flag :terminated)
+            (do
+              (swap! should-terminate? (constantly true))
+              false)
+            true))
+        (do
+          (initiate-ctrl-wave thread-num)
+          false))
+      true)))
 
 (defn intake-from-buff
   [closed open thread-num]
@@ -245,7 +310,7 @@
   "distributed parallel astar algo
     this fn is to be fed to create thread bodies"
   [closed open thread-num]
-  (while (keep-going?)
+  (while (keep-going? closed open thread-num)
     (intake-from-buff closed open thread-num)
     (expand-open closed open thread-num))
   :terminated
@@ -272,9 +337,14 @@
 
 (defn pstatus
   []
-  (clojure.string/join "\n" (list
-                             (str "Buffers: " (mapv deref buffers))
-                             (str "counters: " (mapv deref counters)))))
+  (println "Buffers: " (mapv deref buffers))
+  (println "Counters: " (mapv deref counters))
+  (println "Clocks: " (mapv deref clocks))
+  (println "Tmaxes: " (mapv deref tmaxes))
+  (println "Ctrl msgs: " (mapv deref ctrl-msgs))
+  (println "wave in prog: " @ctrl-wave-in-progress?)
+  (println "should terminate: " @should-terminate?)
+  (println "Incumbent: " @incumbent))
 
 (defn pextract-path
   [goal-node]
@@ -283,6 +353,19 @@
     (if (nil? node)
       path
       (recur (conj path (:loc node)) (:parent node)))))
+
+(defn finish-up
+  [doprint]
+  (let [path (pextract-path (:node @incumbent))]
+    (if (= {:cost @incumbent} Integer/MAX_VALUE)
+      (println "No path found")
+      (if doprint
+        (do
+          (doseq [ln (mo/a-overlay-path path)]
+            (println ln))
+          (println "Found: Path length: " (count path))
+          (mu/print-maze-params))
+        (println "Path length:" (count path))))))
 
 ;; https://stackoverflow.com/questions/42700407/immediately-kill-a-running-future-thread
 (defn psearch-start
@@ -293,16 +376,15 @@
    (reset-all)
    (init-run)
    (println "Searching maze")
-   (let [rets (create-futures mp/nthreads dpa)]
-     (println (map #(deref % 5000 :timedout) rets))
-     (map future-cancel rets))
-   (let [path (pextract-path (:node @incumbent))]
-     (if (= {:cost @incumbent} Integer/MAX_VALUE)
-       (println "No path found")
-       (if doprint 
-         (do
-           (doseq [ln (mo/a-overlay-path path)]
-             (println ln))
-           (println "Found: Path length: " (count path))
-           (mu/print-maze-params))
-         (println "Path length:" (count path)))))))
+   (let [rets (create-futures mp/nthreads dpa)
+         res (map #(deref % 5000 :timedout) rets)]
+     (if (every? #(= :terminated %) res)
+       (do
+         (println "All terminated")
+         (finish-up doprint))
+       (do
+         (println "Error:" res)
+         (map future-cancel rets)
+         (pstatus))))))
+
+

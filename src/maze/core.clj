@@ -80,8 +80,6 @@
         (or (nil? old-f)
             (< new-f old-f))))))
 
-
-
 (defn unvisited-cheaper-successors
   "find unvisited cheaper successors;
    returns as seq of Nodes"
