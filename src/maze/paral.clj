@@ -70,7 +70,7 @@
  
  (def tmaxes (create-thing mp/nthreads atom 0)))
 
-(defn balance-counters
+#_(defn balance-counters
   "sum up all send or receive counters at time t for termination detection"
   []
   (dosync
@@ -335,16 +335,30 @@
   (let [snode (mb/start-node)]
     (put-buffer snode 0)))
 
+(defmacro readout
+  "stringify readout of var"
+  [v]
+  `(if (vector? ~v)
+     (str (name (quote ~v)) ": " (mapv deref ~v))
+     (str (name (quote ~v)) ": " @~v)))
+
+(defn xstatus
+  "returns vector of strings giving readout of quoted vars specified in xs;
+    the xs must be derefable"
+  [xs]
+  (mapv eval 
+        (into []
+              (partition 2 (interleave (repeatedly (constantly  'readout)) xs)))))
+
 (defn pstatus
+  "prints out the results of xstatus in human-readable form for key variables of the algo"
   []
-  (println "Buffers: " (mapv deref buffers))
-  (println "Counters: " (mapv deref counters))
-  (println "Clocks: " (mapv deref clocks))
-  (println "Tmaxes: " (mapv deref tmaxes))
-  (println "Ctrl msgs: " (mapv deref ctrl-msgs))
-  (println "wave in prog: " @ctrl-wave-in-progress?)
-  (println "should terminate: " @should-terminate?)
-  (println "Incumbent: " @incumbent))
+  (let [xs ['buffers 'counters 'clocks 'tmaxes 'ctrl-msgs 'ctrl-wave-in-progress
+            'should-terminate? 'incumbent]]
+    (doseq [line (xstatus xs)]
+      (println line))
+    (println "---------")))
+
 
 (defn pextract-path
   [goal-node]
