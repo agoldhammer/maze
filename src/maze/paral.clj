@@ -244,7 +244,7 @@
 (defn process-ctrl-msg
   "process control msg from thread j"
   [j]
-  ;; msg format is [time accu invalid init
+  ;; msg format is [time accu invalid init]
   (let [rcvr (ctrl-msgs j)]
     (if-let [msg (peek @rcvr)]
       (do
@@ -274,21 +274,24 @@
   [_ open thread-num]
   ;; if at goal and no control wave in progress, initiate one
   ;; if control wave in progress, read message
+  ;; return true if should continue, false if time to terminate
   (if (or (not (mb/deserted? open))
           (pos? (count @(buffers thread-num))))
     true
-    (if (:node @incumbent)
-      (if @ctrl-wave-in-progress? ;; at goal
-        (let [flag (process-ctrl-msg thread-num)]
-          (if (= flag :terminated)
-            (do
-              (swap! should-terminate? (constantly true))
-              false)
-            true))
-        (do
-          (initiate-ctrl-wave thread-num)
-          false))
-      true)))
+    (if @should-terminate?
+      false
+      (if (:node @incumbent)
+        (if @ctrl-wave-in-progress? ;; at goal
+          (let [flag (process-ctrl-msg thread-num)]
+            (if (= flag :terminated)
+              (do
+                (swap! should-terminate? (constantly true))
+                false)
+              true))
+          (do
+            (initiate-ctrl-wave thread-num)
+            false))
+        true))))
 
 (defn intake-from-buff
   [closed open thread-num]
@@ -353,7 +356,7 @@
 (defn pstatus
   "prints out the results of xstatus in human-readable form for key variables of the algo"
   []
-  (let [xs ['buffers 'counters 'clocks 'tmaxes 'ctrl-msgs 'ctrl-wave-in-progress
+  (let [xs ['buffers 'counters 'clocks 'tmaxes 'ctrl-msgs 'ctrl-wave-in-progress?
             'should-terminate? 'incumbent]]
     (doseq [line (xstatus xs)]
       (println line))
