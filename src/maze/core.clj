@@ -4,7 +4,7 @@
             [maze.base :as mb]
             [maze.overlay :as mo]
             [maze.utils :as mu :refer [make-maze]]
-            [maze.paral :as mpar :refer [psearch-start]])
+            [maze.paral :as mpar :refer [psearch-start pstatus]])
   (:gen-class))
 
 (def DEBUG 0)

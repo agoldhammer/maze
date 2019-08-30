@@ -129,7 +129,7 @@
         counter (counters sender)
         clock (clocks sender)]
     ;; implements send portion of Mattern protocol, lines 1-2, p. 166
-    (swap! clock inc)
+    #_(swap! clock inc)
     (swap! counter inc)
     (swap! buffer conj [@clock node])))
 
@@ -361,7 +361,6 @@
     (doseq [line (xstatus xs)]
       (println line))
     (println "---------")))
-
 
 (defn pextract-path
   [goal-node]
