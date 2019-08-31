@@ -161,7 +161,7 @@
   "process control msg from thread j"
   [j]
   ;; msg format is [time accu invalid init]
-  (if ctrl-wave-in-progress?
+  (if @ctrl-wave-in-progress?
     (let [rcvr (ctrl-msgs j)]
       (if-let [msg (peek @rcvr)]
         (do
@@ -195,7 +195,7 @@
     (if stop?
       (swap! should-terminate? (constantly true))
       (do 
-        (when (not ctrl-wave-in-progress?)
+        (when (not @ctrl-wave-in-progress?)
           (initiate-ctrl-wave))
         ;; read ctrl msgs for each thread
         (let [ctrls (mapv process-ctrl-msg (range mp/nthreads))
@@ -233,7 +233,7 @@
 
 (defn intake-from-buff
   [closed open thread-num]
-  (log thread-num "intake")
+  #_(log thread-num "intake")
   (when-let [n' (take-buffer thread-num)]
     #_(log thread-num "non-nil take" n')
     (if-let [oldn (find-in-closed closed n')]
@@ -331,7 +331,7 @@
    (init-run)
    (println "Searching maze")
    (let [rets (create-futures mp/nthreads dpa)
-         res (map #(deref % 5000 :timedout) rets)
+         res (mapv #(deref % 5000 :timedout) rets)
          term-detector (create-termination-detector)]
      (if @should-terminate?
        (do
