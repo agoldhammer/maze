@@ -206,25 +206,13 @@
   (let [loc (:loc node)]
     (get @closed loc)))
 
-(defn expand-open
-  "take next node from open Frontier on thread and expand it"
-  [closed open thread-num]
-  (when (not (mb/deserted? open))
-    (let [node (mb/get-next! open)
-          current-cost (mb/node-total-cost node)]
-      (put-closed closed node)
-      (if (mu/at-goal? (:loc node))
-        (when (< current-cost (:cost @incumbent))
-          (swap! incumbent merge {:cost current-cost :node node}))
-        (let [succs (make-successor-nodes node)]
-          (doseq [succ succs]
-            (put-buffer succ thread-num)))))))
-
 (def log-agent (agent nil))
 
 (defn log [thread-num & mesg]
   (send log-agent #(println (clojure.string/join " " (concat (str thread-num) mesg)) %)))
 
+;;--------------termination detection--------------
+;; for details of termination algorithm, see Mattern 1987 paper, section 6, p. 166
 (defn next-recip
   "return the next agent to receive a control message"
   [j]
@@ -233,69 +221,95 @@
 
 ;; Mattern p 167 steps 13-14
 (defn initiate-ctrl-wave
-  "initiate control wave from thread j"
-  [j]
-  (swap! ctrl-wave-in-progress? (constantly true))
-  (let [clock (swap! (clocks j) inc)
-        count @(counters j)
-        msg [clock count false j]]
-    (swap! (next-recip j) conj msg)))
+  "initiate control wave from thread 0 if goal has been reached
+    and no control wave already in progress"
+  []
+  (when (and (not @ctrl-wave-in-progress?)
+             (:node @incumbent))
+    (do 
+      (swap! ctrl-wave-in-progress? (constantly true))
+      (let [clock (swap! (clocks 0) inc)
+            count @(counters 0)
+            msg [clock count false 0]]
+        (swap! (next-recip 0) conj msg)))))
 
 (defn process-ctrl-msg
   "process control msg from thread j"
   [j]
   ;; msg format is [time accu invalid init]
-  (let [rcvr (ctrl-msgs j)]
-    (if-let [msg (peek @rcvr)]
-      (do
-        (swap! rcvr pop)
-        (let [clock (clocks j)
-              [time accu invalid init] msg]
-          #_(println "rcvd msg" msg "init" init)
-          (swap! clock max time)
-          ;; check for complete round
-          (if (= init j)
-            (do
-              (swap! ctrl-wave-in-progress? (constantly false))
-              (if (and (zero? accu)
-                       (not invalid))
-                :terminated
-                :continue))
-            (let [count @(counters j)
-                  tmax @(tmaxes j)
-                  new-invalid (or invalid (>= tmax time))]
-              #_(println "sending to" (next-recip j))
-              (swap! (next-recip j) conj [time (+ accu count) new-invalid init])
-              :continue))))
-      :continue)))
-
-;; for details of termination algorithm, see Mattern 1987 paper, section 6, p. 166
-(defn keep-going?
-  [_ open thread-num]
-  ;; if at goal and no control wave in progress, initiate one
-  ;; if control wave in progress, read message
-  ;; return true if should continue, false if time to terminate
-  (if (or (not (mb/deserted? open))
-          (pos? (count @(buffers thread-num))))
-    true
-    (if @should-terminate?
-      false
-      (if (:node @incumbent)
-        (if @ctrl-wave-in-progress? ;; at goal
-          (let [flag (process-ctrl-msg thread-num)]
-            (if (= flag :terminated)
+  (if ctrl-wave-in-progress?
+    (let [rcvr (ctrl-msgs j)]
+      (if-let [msg (peek @rcvr)]
+        (do
+          (swap! rcvr pop)
+          (let [clock (clocks j)
+                [time accu invalid init] msg]
+            #_(println "rcvd msg" msg "init" init)
+            (swap! clock max time)
+            ;; check for complete round; initiating thread is always 0
+            (if (= init j)
               (do
-                (swap! should-terminate? (constantly true))
-                false)
-              true))
-          (do
-            (initiate-ctrl-wave thread-num)
-            false))
-        true))))
+                (swap! ctrl-wave-in-progress? (constantly false))
+                (if (and (zero? accu)
+                         (not invalid))
+                  :terminated
+                  :continue))
+              (let [count @(counters j)
+                    tmax @(tmaxes j)
+                    new-invalid (or invalid (>= tmax time))]
+                #_(println "sending to" (next-recip j))
+                ;; pass message on to next recipient
+                (swap! (next-recip j) conj [time (+ accu count) new-invalid init])
+                :continue))))
+        :continue))
+    :continue))
+
+(defn termination-detector
+  "term detection functions to run in thread"
+  []
+  (loop [stop? false]
+    (if stop?
+      (swap! should-terminate? (constantly true))
+      (do 
+        (when (not ctrl-wave-in-progress?)
+          (initiate-ctrl-wave))
+        ;; read ctrl msgs for each thread
+        (let [ctrls (mapv process-ctrl-msg (range mp/nthreads))
+              stop? (= :terminated (ctrls 0))]
+          (recur stop?))))))
+
+(defn create-termination-detector
+  "run the termination detection algo in its own thread"
+  []
+  (future-call termination-detector))
+
+;; end of termination detection ----------------------------------
+
+(defn process-successors
+  "process the successor nodes to node"
+  [node thread-num]
+  (let [succs (make-successor-nodes node)]
+    (doseq [succ succs]
+      (put-buffer succ thread-num))))
+
+(defn expand-open
+  "take next node from open Frontier on thread and expand it"
+  [closed open thread-num]
+  (when (not (mb/deserted? open))
+    (let [node (mb/get-next! open)
+          current-cost (mb/node-total-cost node)
+          incumbent-cost (:cost @incumbent)]
+      (put-closed closed node)
+      (if (mu/at-goal? (:loc node))
+        (when (< current-cost incumbent-cost)
+          (swap! incumbent merge {:cost current-cost :node node}))
+        ;; no point expanding nodes that are already over cost-limit
+        (when (< (inc current-cost) incumbent-cost)
+          (process-successors node thread-num))))))
 
 (defn intake-from-buff
   [closed open thread-num]
-  #_(log thread-num "intake")
+  (log thread-num "intake")
   (when-let [n' (take-buffer thread-num)]
     #_(log thread-num "non-nil take" n')
     (if-let [oldn (find-in-closed closed n')]
@@ -313,7 +327,7 @@
   "distributed parallel astar algo
     this fn is to be fed to create thread bodies"
   [closed open thread-num]
-  (while (keep-going? closed open thread-num)
+  (while (not @should-terminate?)
     (intake-from-buff closed open thread-num)
     (expand-open closed open thread-num))
   :terminated
@@ -351,13 +365,13 @@
   [xs]
   (mapv eval 
         (into []
-              (partition 2 (interleave (repeatedly (constantly  'readout)) xs)))))
+              (partition 2 (interleave (repeatedly (constantly  `readout)) xs)))))
 
 (defn pstatus
   "prints out the results of xstatus in human-readable form for key variables of the algo"
   []
-  (let [xs ['buffers 'counters 'clocks 'tmaxes 'ctrl-msgs 'ctrl-wave-in-progress?
-            'should-terminate? 'incumbent]]
+  (let [xs [`buffers `counters `clocks `tmaxes `ctrl-msgs `ctrl-wave-in-progress?
+            `should-terminate? `incumbent]]
     (doseq [line (xstatus xs)]
       (println line))
     (println "---------")))
@@ -393,14 +407,16 @@
    (init-run)
    (println "Searching maze")
    (let [rets (create-futures mp/nthreads dpa)
-         res (map #(deref % 5000 :timedout) rets)]
-     (if (every? #(= :terminated %) res)
+         res (map #(deref % 5000 :timedout) rets)
+         term-detector (create-termination-detector)]
+     (if @should-terminate?
        (do
          (println "All terminated")
          (finish-up doprint))
        (do
          (println "Error:" res)
          (map future-cancel rets)
+         (future-cancel term-detector)
          (pstatus))))))
 
 
