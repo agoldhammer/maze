@@ -8,10 +8,6 @@
 
 (def incumbent (atom {:node nil :cost Integer/MAX_VALUE}))
 
-#_(def incumbent-cost (atom Integer/MAX_VALUE))
-
-#_(def goal-hit (atom nil))
-
 (defn compute-recipient
   "compute recipient of Node based on hash of its .loc
     Want all nodes with same loc to be processed by same thread"
