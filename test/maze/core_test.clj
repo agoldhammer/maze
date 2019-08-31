@@ -59,7 +59,7 @@
   (testing "thread creation and buffer interaction"
     (mpar/reset-all)
     (let [vec-of-nodes (make-vec-of-Nodes 100)
-          _ (mpar/put-vec-to-buffer vec-of-nodes)
+          _ (mpar/put-vec-to-buffer vec-of-nodes 0)
           futs (mpar/create-futures mp/nthreads test-algo)
           num-nodes-read (reduce + (map deref futs))]
       (is (= 100 num-nodes-read)))))
@@ -90,7 +90,7 @@
   (let [vec-of-nodes (make-vec-of-Nodes 100)]
     (mpar/reset-all)
     (mpar/put-vec-to-buffer vec-of-nodes 0)
-    (is (= (count vec-of-nodes) (reduce + mpar/counters)))))
+    (is (= (count vec-of-nodes) (reduce + (mapv deref mpar/counters))))))
 
 (deftest test-get-buffer
   (testing "testing get from numbered buffer"
@@ -98,7 +98,7 @@
     (let [nodes (into [] (map mpar/take-buffer (range mp/nthreads)))
           start-in-buff? (some #(= (mb/start-node) %) nodes)]
       (is (true? start-in-buff?))
-      (is (= 0 (reduce + mpar/counters))))))
+      (is (= 0 (reduce + (mapv deref mpar/counters)))))))
 
 (deftest test-closed-functions
   (testing "functions dealing with closed map"
@@ -121,12 +121,12 @@
   (testing "loading of start node into open queue"
     (setup-trivial-test)
     (mpar/init-run)
-    (is (= (mb/start-node) (first @(mpar/buffers 3))))
+    (is (= [0 (mb/start-node)] (first @(mpar/buffers 3))))
     (let [futs (mpar/create-futures mp/nthreads mpar/xdpa)]
       ;; start node of trivial maze lands in buffer[3] when mp/nthreads=4
       (is (= [true true true true] (mapv deref futs)))
       (is (= [1 1 1 0] (mapv #(count (deref %)) mpar/buffers)))
-      (is (= [1 1 1 0] (mapv deref mpar/counters))))))
+      (is (= [1 0 0 2] (mapv deref mpar/counters))))))
 
 ;; testing termination detection functions
 

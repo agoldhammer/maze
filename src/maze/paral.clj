@@ -30,77 +30,6 @@
   [n create-fn init-val]
   `(mapv ~create-fn (repeat ~n ~init-val)))
 
-#_(defn create-buffers
-  "create n buffers to receive nodes"
-  [n]
-  (mapv ref (repeat n #{})))
-
-#_(defn create-counters
-  "send or receive counters for termination detection"
-  [n]
-  (mapv ref (repeat n 0)))
-
-#_(defn create-clocks
-  [n]
-  (mapv atom (repeat n 0)))
-
-#_(def send-counters (ref (create-counters mp/nthreads)))
-#_(def recv-counters (ref (create-counters mp/nthreads)))
-
-#_(defn inc-counter
-  "inc the i-th counter of counters"
-  [send-or-recv-counters i num-nodes-sent-or-rcvd]
-  (dosync
-    (let [count (nth @send-or-recv-counters i)]
-      (alter send-or-recv-counters #(assoc % i (+ num-nodes-sent-or-rcvd count))))))
-
-#_(defn reset-counters
-    "reset both send and receive counters"
-    []
-    (dosync
-      (ref-set send-counters (create-counters mp/nthreads))
-    (ref-set recv-counters (create-counters mp/nthreads))))
-
-(comment 
- (def buffers (create-thing mp/nthreads ref #{}))
- 
- (def counters (create-thing mp/nthreads ref 0))
- 
- (def clocks (create-thing mp/nthreads atom 0))
- 
- (def tmaxes (create-thing mp/nthreads atom 0)))
-
-#_(defn balance-counters
-  "sum up all send or receive counters at time t for termination detection"
-  []
-  (dosync
-   (map ensure counters)
-   (reduce + (map deref counters))))
-
-(comment 
- (defn reset-buffers
-   "reset all buffers"
-   []
-   (alter-var-root #'buffers (constantly (create-buffers mp/nthreads))))
- 
- (defn reset-counters
-   "reset all counters"
-   []
-   (alter-var-root #'counters (constantly (create-counters mp/nthreads))))
- 
- (defn reset-clocks
-   "reset all clocks"
-   []
-   (alter-var-root #'clocks (constantly (create-counters mp/nthreads)))))
-
-#_(defn reset-all
-  "reset buffers and counters"
-  []
-  (swap! incumbent merge {:cost Integer/MAX_VALUE :node nil})
-  (reset-buffers)
-  (reset-counters)
-  (reset-clocks))
-
 (defn reset-all
   "reset buffers and counters"
   []
@@ -112,11 +41,6 @@
                                 [#'ctrl-msgs atom []]]]
     (alter-var-root sym (constantly (create-thing mp/nthreads create-fn init)))))
 
-#_(defn get-buff
-  "return the nth buffer"
-  [n]
-  {:pre [(< n mp/nthreads) (> n 0)]}
-  (nth buffers n))
 ;; puts and takes to thread buffer are 'timestamped messages' in the sense of Mattern paper
 ;; A mesg is a vector [CLOCK, node]
 ;; this is SEND in Mattern's terminology
