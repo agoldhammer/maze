@@ -90,7 +90,7 @@
   (let [vec-of-nodes (make-vec-of-Nodes 100)]
     (mpar/reset-all)
     (mpar/put-vec-to-buffer vec-of-nodes 0)
-    (is (= (count vec-of-nodes) (mpar/balance-counters)))))
+    (is (= (count vec-of-nodes) (reduce + mpar/counters)))))
 
 (deftest test-get-buffer
   (testing "testing get from numbered buffer"
@@ -98,7 +98,7 @@
     (let [nodes (into [] (map mpar/take-buffer (range mp/nthreads)))
           start-in-buff? (some #(= (mb/start-node) %) nodes)]
       (is (true? start-in-buff?))
-      (is (= 0 (mpar/balance-counters))))))
+      (is (= 0 (reduce + mpar/counters))))))
 
 (deftest test-closed-functions
   (testing "functions dealing with closed map"
@@ -133,17 +133,19 @@
 (deftest test-initiate-control-wave
   (testing "initiation of control wave"
     (mpar/reset-all)
-    (mpar/initiate-ctrl-wave 0)
-    (is (= 1 @(mpar/clocks 0)) "initiator clock increment")
-    (is (= [1 0 false 0] (peek @(mpar/ctrl-msgs 1))) "message rcvd in next message buffer")))
+    (with-redefs [mpar/incumbent (atom {:node true})]
+      (mpar/initiate-ctrl-wave)
+      (is (= 1 @(mpar/clocks 0)) "initiator clock increment")
+      (is (= [1 0 false 0] (peek @(mpar/ctrl-msgs 1))) "message rcvd in next message buffer"))))
 
 (deftest test-process-ctrl-msg
   (testing "processing of control messages"
     (mpar/reset-all)
-    (mpar/initiate-ctrl-wave 0)
-    (doseq [j (range 1 4)]
-      (is (= :continue (mpar/process-ctrl-msg j))))
-    (is (= [1 0 false 0] (peek @(mpar/ctrl-msgs 0))))
-    (is (= :terminated (mpar/process-ctrl-msg 0)))))
+    (with-redefs [mpar/incumbent (atom {:node true})]
+      (mpar/initiate-ctrl-wave)
+      (doseq [j (range 1 mp/nthreads)]
+        (is (= :continue (mpar/process-ctrl-msg j))))
+      (is (= [1 0 false 0] (peek @(mpar/ctrl-msgs 0))))
+      (is (= :terminated (mpar/process-ctrl-msg 0))))))
 
 
