@@ -18,6 +18,10 @@
 (defn node-comp [^Node n1 ^Node n2]
   (< (node-total-cost n1) (node-total-cost n2)))
 
+;; a message is a vector: [time-stampe node]
+(defn msg-comp [msg1 msg2]
+  (node-comp (msg1 1) (msg2 1)))
+
 (defn calc-heuristic
   "given two locs, loca and locb, calculate the Manhattan distance"
   [loca locb]
@@ -136,6 +140,16 @@
   "make a new priority queue from a vector of Nodes"
   [vec-of-Nodes size]
   (let [queue (priority-queue size node-comp)
+        pq (->PriQ queue)]
+    (add-nodes! pq vec-of-Nodes)
+    pq))
+
+;; in parallel case, frontier holds messages
+;; a message is time stamped: [time node]
+(defn new-msg-priq
+  "make a new priority queue from a vector of Nodes"
+  [vec-of-Nodes size]
+  (let [queue (priority-queue size msg-comp)
         pq (->PriQ queue)]
     (add-nodes! pq vec-of-Nodes)
     pq))

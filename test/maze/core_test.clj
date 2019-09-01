@@ -21,6 +21,9 @@
     ;; loc parent g h
     (apply mb/->Node [[x y] [(inc x) y] g h])))
 
+(def test-node (mb/start-node))
+(def bigger-node (mb/->Node [10 20] test-node 100 200))
+
 (defn make-vec-of-Nodes
   [n]
   (into [] (repeatedly n make-dummy-Node)))
@@ -109,13 +112,6 @@
       (mpar/remove-from-closed closed node)
       (is (nil? (mpar/find-in-closed closed node))))))
 
-(deftest test-open-functions
-  (testing "open functions"
-    (let [open (mb/new-priq [] 100)
-          node (make-dummy-Node)]
-      (mpar/put-open open node)
-      (is (= node (mb/quickpeek open))))))
-
 ;; this test will fail if mp/nthreads != 4
 (deftest test-initial-load
   (testing "loading of start node into open queue"
@@ -147,5 +143,26 @@
         (is (= :continue (mpar/process-ctrl-msg j))))
       (is (= [1 0 false 0] (peek @(mpar/ctrl-msgs 0))))
       (is (= :terminated (mpar/process-ctrl-msg 0))))))
+
+(deftest test-msg-queue
+  (testing "priority queue of time-stamped messages"
+    (setup-trivial-maze)
+    (let [mpq (mb/new-msg-priq [] 100)]
+      (mb/add-nodes! mpq [[0 test-node] [0 bigger-node]])
+      (is (= [0 test-node] (mb/get-next! mpq)))
+      (is (= [0 bigger-node] (mb/get-next! mpq))))))
+
+(deftest test-put-take-open
+  (testing "frontier management functions in parallel case"
+    (mpar/reset-all)
+    (setup-trivial-maze)
+    (let [open (mb/new-msg-priq [] 100)
+          node test-node]
+      (mpar/put-open open node 0)
+      (is (= 1 @(mpar/counters 0)))
+      (is (= node (mpar/take-open open 0)))
+      (is (= 0 @(mpar/counters 0)))
+      (is (= 0 @(mpar/tmaxes 0)))
+      (is (nil? (mpar/take-open open 0))))))
 
 

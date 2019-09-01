@@ -78,26 +78,40 @@
       (swap! tmax max tstamp))
     node))
 
-;; !!! This is a mutating function, might want to find another way
 (defn put-open
-  "add node to open (priority) queue"
-  [open node]
-  (mb/add-nodes! open [node]))
+  "add [clock+1 node] msg to open (msg priority) queue; update counter"
+  [open node thread-num]
+  (let [counter (counters thread-num)
+        clock (clocks thread-num)]
+    ;; implements send portion of Mattern protocol, lines 1-2, p. 166
+    #_(swap! clock inc)
+    (swap! counter inc)
+    (mb/add-nodes! open [[@clock node]]))
+  
+  (defn take-open
+    "take lowest-cost msg [clock node] from open queue"
+    [open thread-num]
+    (let [counter (counters thread-num)
+          tmax (tmaxes thread-num)
+          [tstamp node] (mb/get-next! open)]
+      (when node
+        (swap! counter dec)
+        (swap! tmax max tstamp))
+      node)))
 
 (defmacro setup-future
   "set up ith future"
   [i func]
   `(future (let [closed# (atom (hash-map))
                  ;; don't need atom here because priq is mutable
-                 open# (mb/new-priq [] 100)
+                 open# (mb/new-msg-priq [] 100)
                  thread-num# ~i]
              (~func closed# open# thread-num#))))
 
 (defn create-futures
   "create n futures from setup-thread; func(closed, open, thread-num)"
   [n func]
-  (into [] (for [i (range n)] (setup-future i func)))
-  )
+  (into [] (for [i (range n)] (setup-future i func))))
 
 (defn make-successor-nodes
   "make successors to the current node"
@@ -216,7 +230,7 @@
   "take next node from open Frontier on thread and expand it"
   [closed open thread-num]
   (when (not (mb/deserted? open))
-    (let [node (mb/get-next! open)
+    (let [node (take-open open thread-num)
           current-cost (mb/node-total-cost node)
           incumbent-cost (:cost @incumbent)]
       (put-closed closed node)
@@ -237,10 +251,10 @@
             oldg (:g oldn)]
         (when (< g1 oldg)
           (remove-from-closed closed oldn)
-          (put-open open n')))
+          (put-open open n' thread-num)))
       (do 
         #_(log thread-num "Putting" n')
-        (put-open open n'))))
+        (put-open open n' thread-num))))
   [closed open thread-num])
 
 (defn dpa
