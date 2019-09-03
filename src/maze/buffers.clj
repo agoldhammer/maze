@@ -2,6 +2,8 @@
   #_(:require [maze.params :as mp])
   (:require [maze.base :as mb])
   (:require [maze.utils :as mu])
+  (:require [taoensso.timbre :as timbre])
+  #_(:require [clojure.tools.logging :as log])
   (:import [java.util.concurrent LinkedBlockingQueue]))
 
 (defprotocol Buffer
@@ -99,7 +101,7 @@
      (loop [accum []]
        (if-let [msg (take-buff buff)]
          (do
-           (mu/log i msg)
+           (timbre/infof "buff num: %s msg: %s" i msg)
            (if (= (msg 1) :finish)
              accum
              (recur (conj accum msg))))
