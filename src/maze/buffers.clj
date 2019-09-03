@@ -1,7 +1,7 @@
 (ns maze.buffers
   #_(:require [maze.params :as mp])
   (:require [maze.base :as mb])
-  (:require [maze.utils :as mu])
+  #_(:require [maze.utils :as mu])
   (:require [taoensso.timbre :as timbre])
   #_(:require [clojure.tools.logging :as log])
   (:import [java.util.concurrent LinkedBlockingQueue]))
@@ -14,8 +14,8 @@
   (set-clock [this time] "set the clock to `time`")
   (take-buff [this] "take next basic msg, blocking if none")
   (poll-buff [this] "take next basic msg if present")
-  (put-buff [this payload] "add basic msg")
-  (put-coll-buff [this coll] "put-buff on each member of coll")
+  (put-buff [this sender-clock payload] "add basic msg")
+  (put-coll-buff [this sender-clock coll] "put-buff on each member of coll")
   (vide? [this] "buffer empty?")
   (quickpeek [this] "Peek at next"))
 
@@ -45,12 +45,12 @@
       (do (swap! (.tmax this) max clock)
           [clock payload])
       nil))
-  (put-buff [this payload]
-    (.put (.buff this) [@(.clock this) payload]))
-  (put-coll-buff [this coll]
+  (put-buff [this sender-clock payload]
+            (.put (.buff this) [sender-clock payload]))
+  (put-coll-buff [this sender-clock coll]
     {:pre [(seqable? coll)]}
     (doseq [x coll]
-      (put-buff this x)))
+      (put-buff this sender-clock x)))
   (vide? [this]
     (.isEmpty (.buff this)))
   (quickpeek [this]
@@ -90,7 +90,7 @@
   (when (= @flag 42)
     (let [v (make-vec-of-nodes n)]
       (doseq [node v]
-        (put-buff (cbuffs (compute-recipient node 4)) node))
+        (put-buff (cbuffs (compute-recipient node 4)) 0 node))
       (swap! can-finish? not)
       (mapv get-count cbuffs))))
 
@@ -115,7 +115,7 @@
       (loop [counts (mapv get-count cbuffs)]
         (if (and @can-finish?
                  (every? zero? counts))
-          (mapv #(put-buff (cbuffs %) :finish) (range 4))
+          (mapv #(put-buff (cbuffs %) 0 :finish) (range 4))
           (do
             (Thread/sleep 1)
             (recur (mapv get-count cbuffs)))))
@@ -133,11 +133,16 @@
 
 (def feeds nil)
 (def pumps nil)
-(defn tst
+
+(defn reset-all
   []
   (swap! can-finish? (constantly false))
   (alter-var-root #'cbuffs (constantly (into [] (repeatedly 4 new-counted-buffer))))
-  (alter-var-root #'flag (constantly (promise)))
+  (alter-var-root #'flag (constantly (promise))))
+
+(defn tst
+  []
+  (reset-all)
   #_(alter-var-root #'feeds (constantly (future (feed-buffs 1200))))
   #_(alter-var-root #'pumps (constantly (future-call pump-buffs)))
   (let [feed (future (feed-buffs 20))]
