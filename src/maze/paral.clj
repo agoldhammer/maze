@@ -140,11 +140,6 @@
   (let [loc (:loc node)]
     (get @closed loc)))
 
-(def log-agent (agent nil))
-
-(defn log [thread-num & mesg]
-  (send log-agent #(println (clojure.string/join " " (concat (str thread-num) mesg)) %)))
-
 ;;--------------termination detection--------------
 ;; for details of termination algorithm, see Mattern 1987 paper, section 6, p. 166
 (defn next-recip
@@ -271,7 +266,7 @@
 (defn xdpa
   [closed open thread-num]
   (dotimes [t 1]
-    (log thread-num "starting")
+    (mu/log thread-num "starting")
     (do
       #_(log thread-num "calling intake")
       (intake-from-buff closed open thread-num)

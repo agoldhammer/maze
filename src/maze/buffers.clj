@@ -1,6 +1,7 @@
 (ns maze.buffers
   #_(:require [maze.params :as mp])
   (:require [maze.base :as mb])
+  (:require [maze.utils :as mu])
   (:import [java.util.concurrent LinkedBlockingQueue]))
 
 (defprotocol Buffer
@@ -9,7 +10,8 @@
   (get-tmax [this] "return tmax for this buffer")
   (get-clock [this] "return the clock")
   (set-clock [this time] "set the clock to `time`")
-  (take-buff [this] "take next basic msg")
+  (take-buff [this] "take next basic msg, blocking if none")
+  (poll-buff [this] "take next basic msg if present")
   (put-buff [this payload] "add basic msg")
   (put-coll-buff [this coll] "put-buff on each member of coll")
   (vide? [this] "buffer empty?")
@@ -36,6 +38,11 @@
     (let [[clock payload] (.take (.buff this))]
       (swap! (.tmax this) max clock)
       [clock payload]))
+  (poll-buff [this]
+    (if-let [[clock payload] (.poll (.buff this))]
+      (do (swap! (.tmax this) max clock)
+          [clock payload])
+      nil))
   (put-buff [this payload]
     (.put (.buff this) [@(.clock this) payload]))
   (put-coll-buff [this coll]
@@ -56,7 +63,7 @@
 
 ;;;;;;;;;;for testing
 
-(defn make-dummy-Node
+(defn make-dummy-node
   "make a dummy node"
   []
   (let [x (rand-int 100)
@@ -72,7 +79,9 @@
 
 (defn make-vec-of-nodes
   [n]
-  (into [] (repeatedly n make-dummy-Node)))
+  (into [] (repeatedly n make-dummy-node)))
+
+(def can-finish? (atom false))
 
 (defn feed-buffs
   [n]
@@ -80,6 +89,7 @@
     (let [v (make-vec-of-nodes n)]
       (doseq [node v]
         (put-buff (cbuffs (compute-recipient node 4)) node))
+      (swap! can-finish? not)
       (mapv get-count cbuffs))))
 
 (defn pump-buff
@@ -87,25 +97,53 @@
   (future 
    (let [buff (cbuffs i)]
      (loop [accum []]
-       (if (vide? buff)
-         accum
-         (recur (conj accum (take-buff buff))))))))
+       (if-let [msg (take-buff buff)]
+         (do
+           (mu/log i msg)
+           (if (= (msg 1) :finish)
+             accum
+             (recur (conj accum msg))))
+         accum)))))
 
 (defn pump-buffs
   []
   (when (= @flag 42)
-    (let [contents (mapv pump-buff (range 4))]
-      (while (not (every? zero? (mapv get-count cbuffs)))
-        (Thread/sleep 1))
-      (mapv deref contents))))
+    (let [future-contents 
+          (mapv pump-buff (range 4))]
+      (loop [counts (mapv get-count cbuffs)]
+        (if (and @can-finish?
+                 (every? zero? counts))
+          (mapv #(put-buff (cbuffs %) :finish) (range 4))
+          (do
+            (Thread/sleep 1)
+            (recur (mapv get-count cbuffs)))))
+      future-contents)))
 
 (comment
-  (def cbuffs (into [] (repeatedly 4 new-counted-buffer)))
+ (def cbuffs (into [] (repeatedly 4 new-counted-buffer)))
   (def flag (promise))
-  (def feed (future (feed-buffs 20)))
+  (def feed (future (feed-buffs 20) ))
   (deliver flag 42)
   (mapv get-count cbuffs)
-  (def pumps (future-call pump-buffs)))
+  (def pumps (future-call pump-buffs))
+  
+  )
+
+(def feeds nil)
+(def pumps nil)
+(defn tst
+  []
+  (swap! can-finish? (constantly false))
+  (alter-var-root #'cbuffs (constantly (into [] (repeatedly 4 new-counted-buffer))))
+  (alter-var-root #'flag (constantly (promise)))
+  #_(alter-var-root #'feeds (constantly (future (feed-buffs 1200))))
+  #_(alter-var-root #'pumps (constantly (future-call pump-buffs)))
+  (let [feed (future (feed-buffs 20))]
+    (deliver flag 42)
+    (Thread/sleep 5)
+    (println "cbuff counts" (mapv get-count cbuffs))
+    feed)
+  #_(println "pumps" pumps))
 
 
 
