@@ -2,7 +2,8 @@
   (:require [maze.params :as mp]
             [maze.utils :as mu]
             [maze.base :as mb]
-            [maze.overlay :as mo]))
+            [maze.overlay :as mo]
+            [maze.buffers :as mbuff]))
 
 ;; implementing algos from Fukunga, Botea, et al.
 
@@ -305,17 +306,30 @@
       (println line))
     (println "---------")))
 
+(defn make-dummy-node
+  "make a dummy node"
+  []
+  (let [x (rand-int 100)
+        y (rand-int 100)
+        g (rand-int 50)
+        h (rand-int 1000)]
+    ;; loc parent g h
+    (apply mb/->Node [[x y] [(inc x) y] g h])))
+
 (defn pextract-path
-  [goal-node]
+  [goal-node closed-locs]
   (loop [path []
          node goal-node]
     (if (nil? node)
       path
-      (recur (conj path (:loc node)) (:parent node)))))
+      (let [{:keys [loc parent-loc]} node
+            next-bin (mbuff/hash-of-loc mp/nthreads)]
+        (println loc parent-loc next-bin))
+      #_(recur (conj path (:loc node)) (:parent node)))))
 
 (defn finish-up
   [doprint]
-  (let [path (pextract-path (:node @incumbent))]
+  (let [path (pextract-path (:node @incumbent) mbuff/closed-locs)]
     (if (= {:cost @incumbent} Integer/MAX_VALUE)
       (println "No path found")
       (if doprint

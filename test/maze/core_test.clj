@@ -3,38 +3,13 @@
             [maze.base :as mb]
             [maze.core :as mc]
             [maze.paral :as mpar]
-            [maze.params :as mp]))
+            [maze.params :as mp]
+            [test-utils :as tu]))
 
 (defn setup-trivial-maze
   []
   (mc/read-maze "trivial4"))
 
-#_(use-fixtures :once setup-trivial-maze )
-
-(defn make-dummy-Node
-  "make a dummy node"
-  []
-  (let [x (rand-int 100)
-        y (rand-int 100)
-        g (rand-int 50)
-        h (rand-int 1000)]
-    ;; loc parent g h
-    (apply mb/->Node [[x y] [(inc x) y] g h])))
-
-(def test-node (mb/start-node))
-(def bigger-node (mb/->Node [10 20] test-node 100 200))
-
-(defn make-vec-of-Nodes
-  [n]
-  (into [] (repeatedly n make-dummy-Node)))
-
-(defn make-test-pq
-  "make a PriQ for testing"
-  [n]
-  (let [queue (mb/priority-queue 1000 mb/node-comp)
-        pq (mb/->PriQ queue)]
-    (mb/add-nodes! pq (make-vec-of-Nodes n))
-    pq))
 
 (defn setup-trivial-test
   []
@@ -61,7 +36,7 @@
 (deftest test-threads
   (testing "thread creation and buffer interaction"
     (mpar/reset-all)
-    (let [vec-of-nodes (make-vec-of-Nodes 100)
+    (let [vec-of-nodes (tu/make-vec-of-nodes 100)
           _ (mpar/put-vec-to-buffer vec-of-nodes 0)
           futs (mpar/create-futures mp/nthreads test-algo)
           num-nodes-read (reduce + (map deref futs))]
@@ -90,7 +65,7 @@
 
 (deftest test-buffer-load
   (testing "loading of buffers: count out should = count in")
-  (let [vec-of-nodes (make-vec-of-Nodes 100)]
+  (let [vec-of-nodes (tu/make-vec-of-nodes 100)]
     (mpar/reset-all)
     (mpar/put-vec-to-buffer vec-of-nodes 0)
     (is (= (count vec-of-nodes) (reduce + (mapv deref mpar/counters))))))
@@ -106,7 +81,7 @@
 (deftest test-closed-functions
   (testing "functions dealing with closed map"
     (let [closed (atom {})
-          node (make-dummy-Node)]
+          node (tu/make-dummy-node)]
       (mpar/put-closed closed node)
       (is (= node (mpar/find-in-closed closed node)))
       (mpar/remove-from-closed closed node)
@@ -147,7 +122,9 @@
 (deftest test-msg-queue
   (testing "priority queue of time-stamped messages"
     (setup-trivial-maze)
-    (let [mpq (mb/new-msg-priq [] 100)]
+    (let [mpq (mb/new-msg-priq [] 100)
+          test-node (mb/start-node)
+          bigger-node (mb/->Node [10 20] test-node 100 200)]
       (mb/add-nodes! mpq [[0 test-node] [0 bigger-node]])
       (is (= [0 test-node] (mb/get-next! mpq)))
       (is (= [0 bigger-node] (mb/get-next! mpq))))))
@@ -157,7 +134,7 @@
     (mpar/reset-all)
     (setup-trivial-maze)
     (let [open (mb/new-msg-priq [] 100)
-          node test-node]
+          node (mb/start-node)]
       (mpar/put-open open node 0)
       (is (= 1 @(mpar/counters 0)))
       (is (= node (mpar/take-open open 0)))

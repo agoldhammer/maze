@@ -159,7 +159,9 @@
   "return start Node"
   []
   (let [start @mp/start*]
-    (->Node start nil 0 (calc-heuristic start @mp/goal*))))
+    (if (not= [] start)
+      (->Node start nil 0 (calc-heuristic start @mp/goal*))
+      nil)))
 
 (defn astar-start-frontier
   "return initial frontier (PriQ) for astar"

@@ -63,6 +63,11 @@
   (quickpeek [this]
              (.peek (.buff this))))
 
+(defn hash-of-loc
+  "compute hash of loc of node"
+  [loc nthreads]
+  (mod (hash loc) nthreads))
+
 (defn compute-recipient
   "compute recipient of tstamped message based on hash of its node's .loc
     Want all nodes with same loc to be processed by same thread"
@@ -70,7 +75,7 @@
   {:pre [(vector? msg)
          (= 2 (count msg))]}
   (let [loc (:loc (msg 1))]
-    (mod (hash loc) nthreads)))
+    (hash-of-loc loc nthreads)))
 
 ;;; key variables
 (def input-buffs [])
@@ -78,7 +83,7 @@
 (def ctrl-wave-in-progress? (atom false))
 
 (def open-qs [])
-(def closed-qs [])
+(def closed-locs [])
 (def incumbent (atom {}))
 
 (defmacro create-thing
@@ -93,7 +98,7 @@
   
   (alter-var-root #'input-buffs (constantly (into [] (repeatedly mp/nthreads new-counted-buffer))))
   (alter-var-root #'open-qs (constantly (into [] (repeatedly mp/nthreads new-open-queue))))
-  (alter-var-root #'closed-qs (constantly (into [] (repeat mp/nthreads {}))))
+  (alter-var-root #'closed-locs (constantly (into [] (repeat mp/nthreads {}))))
   
   #_(doseq [[sym create-fn init] [[#'buffers atom #{}] [#'counters atom 0]
                                   [#'clocks atom 0] [#'tmaxes atom 0]
