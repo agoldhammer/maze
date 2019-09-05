@@ -98,12 +98,34 @@
   
   (alter-var-root #'input-buffs (constantly (into [] (repeatedly mp/nthreads new-counted-buffer))))
   (alter-var-root #'open-qs (constantly (into [] (repeatedly mp/nthreads new-open-queue))))
-  (alter-var-root #'closed-locs (constantly (into [] (repeat mp/nthreads {}))))
+  (alter-var-root #'closed-locs (constantly (into [] (repeat mp/nthreads (atom {})))))
   
   #_(doseq [[sym create-fn init] [[#'buffers atom #{}] [#'counters atom 0]
                                   [#'clocks atom 0] [#'tmaxes atom 0]
                                   [#'ctrl-msgs atom []]]]
       (alter-var-root sym (constantly (create-thing mp/nthreads create-fn init)))))
+
+;;;;;;;;; functions for closed-locs
+
+(defn put-closed
+  "add node to closed buffer"
+  [closed node]
+  (swap! closed assoc (:loc node) node))
+
+(defn remove-from-closed
+  "remove node from the closed map"
+  [closed node]
+  (swap! closed dissoc (:loc node)))
+
+(defn find-in-closed
+  "return node if in closed, nil otherwise"
+  ([node]
+   (let [loc (:loc node)
+         thr-num (hash-of-loc loc mp/nthreads)
+         closed (closed-locs thr-num)]
+     (get @closed loc)))
+  ([closed loc]
+   (get @closed loc)))
 
 (comment
  (def cbuffs (into [] (repeatedly 4 new-counted-buffer)))
@@ -114,16 +136,3 @@
   (def pumps (future-call pump-buffs))
   
   )
-
-
-
-
-
-
-
-
-
-
-
-
-

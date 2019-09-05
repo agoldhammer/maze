@@ -18,7 +18,7 @@
   (testing "functions dealing with closed map"
     (let [closed (atom {})
           node (tu/make-dummy-node)]
-      (mpar/put-closed closed node)
-      (is (= node (mpar/find-in-closed closed node)))
-      (mpar/remove-from-closed closed node)
-      (is (nil? (mpar/find-in-closed closed node))))))
+      (mbuff/put-closed closed node)
+      (is (= node (mbuff/find-in-closed closed node)))
+      (mbuff/remove-from-closed closed node)
+      (is (nil? (mbuff/find-in-closed closed node))))))

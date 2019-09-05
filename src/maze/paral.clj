@@ -125,21 +125,6 @@
     (into [] (for [s succs]
                (mb/->Node s (:loc node) newg (mb/calc-heuristic s goal))))))
 
-(defn put-closed
-  "add node to closed buffer"
-  [closed node]
-  (swap! closed assoc (:loc node) node))
-
-(defn remove-from-closed
-  "remove node from the closed map"
-  [closed node]
-  (swap! closed dissoc (:loc node)))
-
-(defn find-in-closed
-  "return node if in closed, nil otherwise"
-  [closed node]
-  (let [loc (:loc node)]
-    (get @closed loc)))
 
 ;;--------------termination detection--------------
 ;; for details of termination algorithm, see Mattern 1987 paper, section 6, p. 166
@@ -306,20 +291,23 @@
       (println line))
     (println "---------")))
 
+;; TODO needs work !!!!
 (defn pextract-path
-  [goal-node closed-locs]
+  "extract the path from the closed-locs"
+  [goal-node]
   (loop [path []
          node goal-node]
     (if (nil? node)
       path
-      (let [{:keys [loc parent-loc]} node
-            next-bin (mbuff/hash-of-loc mp/nthreads)]
-        (println loc parent-loc next-bin))
+      (let [{:keys [loc parent-loc]} node]
+        (if-let [next-node (mbuff/find-in-closed mbuff/closed-locs parent-loc)]
+          (recur (conj path loc) next-node)
+          (conj path loc)))
       #_(recur (conj path (:loc node)) (:parent node)))))
 
 (defn finish-up
   [doprint]
-  (let [path (pextract-path (:node @incumbent) mbuff/closed-locs)]
+  (let [path (pextract-path (:node @incumbent))]
     (if (= {:cost @incumbent} Integer/MAX_VALUE)
       (println "No path found")
       (if doprint
