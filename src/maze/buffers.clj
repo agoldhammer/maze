@@ -1,10 +1,12 @@
 (ns maze.buffers
   #_(:require [maze.params :as mp])
-  (:require [maze.base :as mb])
+  (:require [maze.base :as mb]
+            [maze.params :as mp])
   #_(:require [maze.utils :as mu])
-  (:require [taoensso.timbre :as timbre])
+  #_(:require [taoensso.timbre :as log])
   #_(:require [clojure.tools.logging :as log])
-  (:import [java.util.concurrent LinkedBlockingQueue]))
+  (:import [java.util.concurrent PriorityBlockingQueue]
+           [java.util.concurrent LinkedBlockingQueue]))
 
 (defprotocol Buffer
   "protocol for counting buffer"
@@ -14,17 +16,26 @@
   (set-clock [this time] "set the clock to `time`")
   (take-buff [this] "take next basic msg, blocking if none")
   (poll-buff [this] "take next basic msg if present")
-  (put-buff [this sender-clock payload] "add basic msg")
-  (put-coll-buff [this sender-clock coll] "put-buff on each member of coll")
+  (put-buff [this time-stamped-msg] "add basic msg")
   (vide? [this] "buffer empty?")
   (quickpeek [this] "Peek at next"))
 
 (deftype CountedBuffer [buff clock tmax])
 
 (defn new-counted-buffer
-  "returns new Counted-Buffer"
+  "returns new CountedBuffer with blocking queue"
   []
   (->CountedBuffer (LinkedBlockingQueue.) (atom 0) (atom 0)))
+
+(defn msg-comp
+  "compare 2 msgs of form [tstamp nodea] [tstamp nodeb]"
+  [[_ nodea] [_ nodeb]]
+  (mb/node-comp nodea nodeb))
+
+(defn new-open-queue
+  "returns new CountedBuffer with priority queue"
+  []
+  (->CountedBuffer (PriorityBlockingQueue. 100 (comparator msg-comp)) (atom 0) (atom 0)))
 
 (extend-protocol Buffer
   CountedBuffer
@@ -45,81 +56,49 @@
       (do (swap! (.tmax this) max clock)
           [clock payload])
       nil))
-  (put-buff [this sender-clock payload]
-            (.put (.buff this) [sender-clock payload]))
-  (put-coll-buff [this sender-clock coll]
-    {:pre [(seqable? coll)]}
-    (doseq [x coll]
-      (put-buff this sender-clock x)))
+  (put-buff [this time-stamped-msg]
+            (.put (.buff this) time-stamped-msg))
   (vide? [this]
-    (.isEmpty (.buff this)))
+         (.isEmpty (.buff this)))
   (quickpeek [this]
-    (.peek (.buff this))))
+             (.peek (.buff this))))
 
 (defn compute-recipient
-  "compute recipient of Node based on hash of its .loc
+  "compute recipient of tstamped message based on hash of its node's .loc
     Want all nodes with same loc to be processed by same thread"
-  [node nthreads]
-  (mod (hash (:loc node)) nthreads))
+  [msg nthreads]
+  {:pre [(vector? msg)
+         (= 2 (count msg))]}
+  (let [loc (:loc (msg 1))]
+    (mod (hash loc) nthreads)))
 
+;;; key variables
+(def input-buffs [])
+(def ctrl-msgs)
+(def ctrl-wave-in-progress? (atom false))
 
-;;;;;;;;;;for testing
+(def open-qs [])
+(def closed-qs [])
+(def incumbent (atom {}))
 
-(defn make-dummy-node
-  "make a dummy node"
+(defmacro create-thing
+  [n create-fn init-val]
+  `(mapv ~create-fn (repeat ~n ~init-val)))
+
+(defn reset-all
+  "reset buffers and counters"
   []
-  (let [x (rand-int 100)
-        y (rand-int 100)
-        g (rand-int 50)
-        h (rand-int 1000)]
-    ;; loc parent g h
-    (apply mb/->Node [[x y] [(inc x) y] g h])))
-
-(def cbuffs (into [] (repeatedly 4 new-counted-buffer)))
-
-(def flag (promise))
-
-(defn make-vec-of-nodes
-  [n]
-  (into [] (repeatedly n make-dummy-node)))
-
-(def can-finish? (atom false))
-
-(defn feed-buffs
-  [n]
-  (when (= @flag 42)
-    (let [v (make-vec-of-nodes n)]
-      (doseq [node v]
-        (put-buff (cbuffs (compute-recipient node 4)) 0 node))
-      (swap! can-finish? not)
-      (mapv get-count cbuffs))))
-
-(defn pump-buff
-  [i]
-  (future 
-   (let [buff (cbuffs i)]
-     (loop [accum []]
-       (if-let [msg (take-buff buff)]
-         (do
-           (timbre/infof "buff num: %s msg: %s" i msg)
-           (if (= (msg 1) :finish)
-             accum
-             (recur (conj accum msg))))
-         accum)))))
-
-(defn pump-buffs
-  []
-  (when (= @flag 42)
-    (let [future-contents 
-          (mapv pump-buff (range 4))]
-      (loop [counts (mapv get-count cbuffs)]
-        (if (and @can-finish?
-                 (every? zero? counts))
-          (mapv #(put-buff (cbuffs %) 0 :finish) (range 4))
-          (do
-            (Thread/sleep 1)
-            (recur (mapv get-count cbuffs)))))
-      future-contents)))
+  (swap! incumbent merge {:cost Integer/MAX_VALUE :node nil})
+  (swap! ctrl-wave-in-progress? (constantly false))
+  
+  (alter-var-root #'input-buffs (constantly (into [] (repeatedly mp/nthreads new-counted-buffer))))
+  (alter-var-root #'open-qs (constantly (into [] (repeatedly mp/nthreads new-open-queue))))
+  (alter-var-root #'closed-qs (constantly (into [] (repeat mp/nthreads {}))))
+  
+  #_(doseq [[sym create-fn init] [[#'buffers atom #{}] [#'counters atom 0]
+                                  [#'clocks atom 0] [#'tmaxes atom 0]
+                                  [#'ctrl-msgs atom []]]]
+      (alter-var-root sym (constantly (create-thing mp/nthreads create-fn init)))))
 
 (comment
  (def cbuffs (into [] (repeatedly 4 new-counted-buffer)))
@@ -131,26 +110,13 @@
   
   )
 
-(def feeds nil)
-(def pumps nil)
 
-(defn reset-all
-  []
-  (swap! can-finish? (constantly false))
-  (alter-var-root #'cbuffs (constantly (into [] (repeatedly 4 new-counted-buffer))))
-  (alter-var-root #'flag (constantly (promise))))
 
-(defn tst
-  []
-  (reset-all)
-  #_(alter-var-root #'feeds (constantly (future (feed-buffs 1200))))
-  #_(alter-var-root #'pumps (constantly (future-call pump-buffs)))
-  (let [feed (future (feed-buffs 20))]
-    (deliver flag 42)
-    (Thread/sleep 5)
-    (println "cbuff counts" (mapv get-count cbuffs))
-    feed)
-  #_(println "pumps" pumps))
+
+
+
+
+
 
 
 

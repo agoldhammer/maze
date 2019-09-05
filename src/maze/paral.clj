@@ -120,9 +120,9 @@
         newg (inc (.g node))
         succs (mu/successors loc)
         goal @mp/goal*]
-    ;; using whole node as parent, not just its .loc
+    ;; parent :loc becomes parent-loc of successor node
     (into [] (for [s succs]
-               (mb/->Node s node newg (mb/calc-heuristic s goal))))))
+               (mb/->Node s (:loc node) newg (mb/calc-heuristic s goal))))))
 
 (defn put-closed
   "add node to closed buffer"
