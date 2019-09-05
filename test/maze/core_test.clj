@@ -63,12 +63,7 @@
           succs (mpar/make-successor-nodes start)]
       (is (= (count succs) 3)))))
 
-(deftest test-buffer-load
-  (testing "loading of buffers: count out should = count in")
-  (let [vec-of-nodes (tu/make-vec-of-nodes 100)]
-    (mpar/reset-all)
-    (mpar/put-vec-to-buffer vec-of-nodes 0)
-    (is (= (count vec-of-nodes) (reduce + (mapv deref mpar/counters))))))
+
 
 (deftest test-get-buffer
   (testing "testing get from numbered buffer"
@@ -78,14 +73,7 @@
       (is (true? start-in-buff?))
       (is (= 0 (reduce + (mapv deref mpar/counters)))))))
 
-(deftest test-closed-functions
-  (testing "functions dealing with closed map"
-    (let [closed (atom {})
-          node (tu/make-dummy-node)]
-      (mpar/put-closed closed node)
-      (is (= node (mpar/find-in-closed closed node)))
-      (mpar/remove-from-closed closed node)
-      (is (nil? (mpar/find-in-closed closed node))))))
+
 
 ;; this test will fail if mp/nthreads != 4
 (deftest test-initial-load

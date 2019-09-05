@@ -9,7 +9,7 @@
 
 (def incumbent (atom {:node nil :cost Integer/MAX_VALUE}))
 
-(defn compute-recipient
+#_(defn compute-recipient
   "compute recipient of Node based on hash of its .loc
     Want all nodes with same loc to be processed by same thread"
   [node]
@@ -41,7 +41,7 @@
 ;; puts and takes to thread buffer are 'timestamped messages' in the sense of Mattern paper
 ;; A mesg is a vector [CLOCK, node]
 ;; this is SEND in Mattern's terminology
-(defn put-buffer
+#_(defn put-buffer
   "put a node from thread 'sender' (thread-num) in buffer[compute-recipient(node)]
     update counter and clock for the sender"
   [node sender]
@@ -54,14 +54,14 @@
     (swap! counter inc)
     (swap! buffer conj [@clock node])))
 
-(defn put-vec-to-buffer
+#_(defn put-vec-to-buffer
   "put a vector of nodes in buffers[compute-recipient(node)], update send-counters[i]"
   [nodes sender]
   {:pre [(vector? nodes)]}
   (doseq [node nodes]
     (put-buffer node sender)))
 
-(defn take-buffer
+#_(defn take-buffer
   "get and remove first node from numbered buffer; return nil if buffer empty;
     update counter and tmax for the receiver"
   [receiver]
@@ -79,7 +79,7 @@
       (swap! tmax max tstamp))
     node))
 
-(defn put-open
+#_(defn put-open
   "add [clock+1 node] msg to open (msg priority) queue; update counter"
   [open node thread-num]
   (let [counter (counters thread-num)
