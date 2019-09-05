@@ -215,14 +215,14 @@
 
 ;; end of termination detection ----------------------------------
 
-(defn process-successors
+#_(defn process-successors
   "process the successor nodes to node"
   [node thread-num]
   (let [succs (make-successor-nodes node)]
     (doseq [succ succs]
       (put-buffer succ thread-num))))
 
-(defn expand-open
+#_(defn expand-open
   "take next node from open Frontier on thread and expand it"
   [closed open thread-num]
   (when (not (mb/deserted? open))
@@ -237,7 +237,7 @@
         (when (< (inc current-cost) incumbent-cost)
           (process-successors node thread-num))))))
 
-(defn intake-from-buff
+#_(defn intake-from-buff
   [closed open thread-num]
   #_(log thread-num "intake")
   (when-let [n' (take-buffer thread-num)]
@@ -253,7 +253,7 @@
         (put-open open n' thread-num))))
   [closed open thread-num])
 
-(defn dpa
+#_(defn dpa
   "distributed parallel astar algo
     this fn is to be fed to create thread bodies"
   [closed open thread-num]
@@ -264,7 +264,7 @@
   )
 
 ;; dpa development version, using dotimes instead of while
-(defn xdpa
+#_(defn xdpa
   [closed open thread-num]
   (dotimes [t 1]
     (mu/log thread-num "starting")
@@ -275,7 +275,7 @@
   (mb/deserted? open)
   #_[closed open thread-num])
 
-(defn init-run
+#_(defn init-run
   "start the run by placing start node in buffers[0]"
   []
   (reset-all)
@@ -306,16 +306,6 @@
       (println line))
     (println "---------")))
 
-(defn make-dummy-node
-  "make a dummy node"
-  []
-  (let [x (rand-int 100)
-        y (rand-int 100)
-        g (rand-int 50)
-        h (rand-int 1000)]
-    ;; loc parent g h
-    (apply mb/->Node [[x y] [(inc x) y] g h])))
-
 (defn pextract-path
   [goal-node closed-locs]
   (loop [path []
@@ -341,7 +331,7 @@
         (println "Path length:" (count path))))))
 
 ;; https://stackoverflow.com/questions/42700407/immediately-kill-a-running-future-thread
-(defn psearch-start
+#_(defn psearch-start
   "start a new || astar search; print path overlaid result if doprint is true"
   ([]
    (psearch-start true))

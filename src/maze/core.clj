@@ -4,7 +4,7 @@
             [maze.base :as mb]
             [maze.overlay :as mo]
             [maze.utils :as mu :refer [make-maze]]
-            [maze.paral :as mpar :refer [psearch-start pstatus]])
+            #_[maze.paral :as mpar :refer [psearch-start pstatus]])
   (:gen-class))
 
 (def DEBUG 0)
@@ -195,7 +195,7 @@
     (reset! mp/maze* (:maze parms)))
   (println "Read maze" fname))
 
-(defn psearch
+#_(defn psearch
   []
   (psearch-start))
 
