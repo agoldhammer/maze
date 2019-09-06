@@ -204,10 +204,11 @@
   "process the successor nodes to node"
   [node thread-num]
   (let [succs (make-successor-nodes node)
-        clock (:clock (mbuff/open-qs thread-num))]
+        clock (.clock (mbuff/open-qs thread-num))]
     (doseq [succ succs]
       (let [msg [@clock succ]
-            recip (mbuff/compute-recipient msg mp/nthreads)]
+            ibuf (mbuff/compute-recipient msg mp/nthreads)
+            recip (mbuff/input-buffs ibuf)]
         (mbuff/put-buff recip msg)))))
 
 #_(defn expand-open
