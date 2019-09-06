@@ -2,7 +2,7 @@
   (:require [clojure.test :refer [deftest is are testing use-fixtures]]
             [maze.test-utils :as tu]
             [maze.buffers :as mbuff]
-            #_[maze.base :as mb]
+            [maze.base :as mb]
             #_[taoensso.timbre :as log]
             #_[maze.core :as mc]
             [maze.paral :as mpar]
@@ -19,6 +19,15 @@
     (let [closed (atom {})
           node (tu/make-dummy-node)]
       (mbuff/put-closed closed node)
-      (is (= node (mbuff/find-in-closed closed node)))
+      (is (= node (mbuff/find-in-closed closed (:loc node))))
       (mbuff/remove-from-closed closed node)
-      (is (nil? (mbuff/find-in-closed closed node))))))
+      (is (nil? (mbuff/find-in-closed closed (:loc node)))))))
+
+(deftest test-process-successors
+  (testing "routing of successors for trivial maze"
+    (setup-trivial-test)
+    (mpar/process-successors (mb/start-node) 0)
+    (is (= (mbuff/input-buffs 0) (tu/make-dummy-node)))
+    (is (= (mbuff/input-buffs 1) (tu/make-dummy-node)))
+    (is (= (mbuff/input-buffs 2) (tu/make-dummy-node)))
+    (is (= (mbuff/input-buffs 3) (tu/make-dummy-node)))))

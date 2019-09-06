@@ -200,12 +200,15 @@
 
 ;; end of termination detection ----------------------------------
 
-#_(defn process-successors
+(defn process-successors
   "process the successor nodes to node"
   [node thread-num]
-  (let [succs (make-successor-nodes node)]
+  (let [succs (make-successor-nodes node)
+        clock (:clock (mbuff/open-qs thread-num))]
     (doseq [succ succs]
-      (put-buffer succ thread-num))))
+      (let [msg [@clock succ]
+            recip (mbuff/compute-recipient msg mp/nthreads)]
+        (mbuff/put-buff recip msg)))))
 
 #_(defn expand-open
   "take next node from open Frontier on thread and expand it"

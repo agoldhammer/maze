@@ -106,6 +106,10 @@
       (alter-var-root sym (constantly (create-thing mp/nthreads create-fn init)))))
 
 ;;;;;;;;; functions for closed-locs
+;; `closed` is one of the closed-locs atoms, of which there are mp/threads
+;; selection can be made by calling hash-of-loc, as indicated in find-in-closed
+;; put and remove interact only from within thread, so know which buffer they are using
+;; find-in-closed is used for path extraction: see mpar/pextract
 
 (defn put-closed
   "add node to closed buffer"
