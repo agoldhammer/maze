@@ -4,7 +4,8 @@
             [maze.base :as mb]
             [maze.overlay :as mo]
             [maze.buffers :as mbuff :refer [put-buff take-buff get-clock
-                                            remove-from-closed find-in-closed]]))
+                                            remove-from-closed find-in-closed
+                                            put-closed vide?]]))
 
 ;; implementing algos from Fukunga, Botea, et al.
 
@@ -203,20 +204,20 @@
 
 (defn process-successors
   "process the successor nodes to node"
-  [node thread-num]
+  [node open]
   (let [succs (make-successor-nodes node)
-        clock (.clock (mbuff/open-qs thread-num))]
+        clock (.clock open)]
     (doseq [succ succs]
       (let [msg [@clock succ]
             ibuf (mbuff/compute-recipient msg mp/nthreads)
             recip (mbuff/input-buffs ibuf)]
         (put-buff recip msg)))))
 
-#_(defn expand-open
+(defn expand-open
   "take next node from open Frontier on thread and expand it"
-  [closed open thread-num]
-  (when (not (mb/deserted? open))
-    (let [node (take-open open thread-num)
+  [closed open]
+  (when (not (vide? open))
+    (let [[_ node] (take-buff open)
           current-cost (mb/node-total-cost node)
           incumbent-cost (:cost @incumbent)]
       (put-closed closed node)
@@ -225,7 +226,7 @@
           (swap! incumbent merge {:cost current-cost :node node}))
         ;; no point expanding nodes that are already over cost-limit
         (when (< (inc current-cost) incumbent-cost)
-          (process-successors node thread-num))))))
+          (process-successors node open))))))
 
 (defn intake-from-buff
   [input closed open]

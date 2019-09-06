@@ -4,13 +4,7 @@
             [maze.buffers :as mbuff]
             [maze.base :as mb]
             [maze.paral :as mpar]
-<<<<<<< HEAD
             [maze.params :as mp]))
-=======
-            #_[taoensso.timbre :as log]
-            #_[maze.core :as mc]
-            #_[maze.params :as mp]))
->>>>>>> 27979b2dd4fd3d61b420dda99cb45012b0263696
 
 (defn setup-trivial-test
   []
@@ -30,7 +24,7 @@
 (deftest test-process-successors
   (testing "routing of successors for trivial maze"
     (setup-trivial-test)
-    (mpar/process-successors (mb/start-node) 0)
+    (mpar/process-successors (mb/start-node) (mbuff/open-qs 0))
     (let [v (mapv mbuff/poll-buff mbuff/input-buffs)]
       (is (= [2 0] (:loc (get-in v [0 1]))))
       (is (= [1 1] (:loc (get-in v [1 1]))))
@@ -47,3 +41,18 @@
       (mbuff/put-buff input [0 (mb/start-node)])
       (mpar/intake-from-buff input closed open)
       (is (= [0 (mb/start-node)] (mbuff/poll-buff open))))))
+
+(deftest test-expand-open
+  (testing "expand-open"
+    (setup-trivial-test)
+    (let [open (mbuff/open-qs 0)
+          closed (mbuff/closed-locs 0)]
+      (mbuff/put-buff open [0 (mb/start-node)])
+      (mpar/expand-open closed open)
+      (let [v (mapv mbuff/poll-buff mbuff/input-buffs)]
+        (is (= [2 0] (:loc (get-in v [0 1]))))
+        (is (= [1 1] (:loc (get-in v [1 1]))))
+        (is (= [0 0] (:loc (get-in v [2 1]))))
+        (is (nil? (v 3))))
+      (let [closed-node (mbuff/find-in-closed closed (:loc (mb/start-node)))]
+        (is (= (mb/start-node) closed-node))))))
