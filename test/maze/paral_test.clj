@@ -4,7 +4,13 @@
             [maze.buffers :as mbuff]
             [maze.base :as mb]
             [maze.paral :as mpar]
+<<<<<<< HEAD
             [maze.params :as mp]))
+=======
+            #_[taoensso.timbre :as log]
+            #_[maze.core :as mc]
+            #_[maze.params :as mp]))
+>>>>>>> 27979b2dd4fd3d61b420dda99cb45012b0263696
 
 (defn setup-trivial-test
   []
