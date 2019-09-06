@@ -3,7 +3,8 @@
             [maze.utils :as mu]
             [maze.base :as mb]
             [maze.overlay :as mo]
-            [maze.buffers :as mbuff]))
+            [maze.buffers :as mbuff :refer [put-buff take-buff get-clock
+                                            remove-from-closed find-in-closed]]))
 
 ;; implementing algos from Fukunga, Botea, et al.
 
@@ -209,7 +210,7 @@
       (let [msg [@clock succ]
             ibuf (mbuff/compute-recipient msg mp/nthreads)
             recip (mbuff/input-buffs ibuf)]
-        (mbuff/put-buff recip msg)))))
+        (put-buff recip msg)))))
 
 #_(defn expand-open
   "take next node from open Frontier on thread and expand it"
@@ -226,24 +227,23 @@
         (when (< (inc current-cost) incumbent-cost)
           (process-successors node thread-num))))))
 
-#_(defn intake-from-buff
-  [closed open thread-num]
+(defn intake-from-buff
+  [input closed open]
   #_(log thread-num "intake")
-  (when-let [n' (take-buffer thread-num)]
+  (when-let [[_ n'] (take-buff input)]
     #_(log thread-num "non-nil take" n')
-    (if-let [oldn (find-in-closed closed n')]
+    (if-let [oldn (find-in-closed closed (:loc n'))]
       (let [g1 (:g n')
             oldg (:g oldn)]
         (when (< g1 oldg)
           (remove-from-closed closed oldn)
-          (put-open open n' thread-num)))
-      (do 
+          (put-buff open [(get-clock input) n'])))
+      (do
         #_(log thread-num "Putting" n')
-        (put-open open n' thread-num))))
-  [closed open thread-num])
+        (put-buff open [(get-clock input) n'])))))
 
 #_(defn dpa
-  "distributed parallel astar algo
+    "distributed parallel astar algo
     this fn is to be fed to create thread bodies"
   [closed open thread-num]
   (while (not @should-terminate?)

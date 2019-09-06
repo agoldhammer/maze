@@ -1,4 +1,4 @@
-(ns maze.buffers-test
+(ns maze.buff-test
   (:require [clojure.test :refer [deftest is are testing use-fixtures]]
             [maze.buffers :as mbuff]
             [maze.base :as mb]

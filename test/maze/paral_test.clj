@@ -4,9 +4,7 @@
             [maze.buffers :as mbuff]
             [maze.base :as mb]
             [maze.paral :as mpar]
-            #_[taoensso.timbre :as log]
-            #_[maze.core :as mc]
-            #_[maze.params :as mp]))
+            [maze.params :as mp]))
 
 (defn setup-trivial-test
   []
@@ -32,3 +30,14 @@
       (is (= [1 1] (:loc (get-in v [1 1]))))
       (is (= [0 0] (:loc (get-in v [2 1]))))
       (is (nil? (v 3))))))
+
+(deftest test-intake
+  (testing "intake from input buffers"
+    (setup-trivial-test)
+    (let [ibuff (mbuff/hash-of-loc (:loc (mb/start-node)) mp/nthreads)
+          input (mbuff/input-buffs ibuff)
+          closed (mbuff/closed-locs ibuff)
+          open (mbuff/open-qs ibuff)] ; ibuff will equal 3
+      (mbuff/put-buff input [0 (mb/start-node)])
+      (mpar/intake-from-buff input closed open)
+      (is (= [0 (mb/start-node)] (mbuff/poll-buff open))))))
