@@ -3,9 +3,9 @@
             [maze.test-utils :as tu]
             [maze.buffers :as mbuff]
             [maze.base :as mb]
+            [maze.paral :as mpar]
             #_[taoensso.timbre :as log]
             #_[maze.core :as mc]
-            [maze.paral :as mpar]
             #_[maze.params :as mp]))
 
 (defn setup-trivial-test
@@ -27,7 +27,8 @@
   (testing "routing of successors for trivial maze"
     (setup-trivial-test)
     (mpar/process-successors (mb/start-node) 0)
-    (is (= (mbuff/input-buffs 0) (tu/make-dummy-node)))
-    (is (= (mbuff/input-buffs 1) (tu/make-dummy-node)))
-    (is (= (mbuff/input-buffs 2) (tu/make-dummy-node)))
-    (is (= (mbuff/input-buffs 3) (tu/make-dummy-node)))))
+    (let [v (mapv mbuff/poll-buff mbuff/input-buffs)]
+      (is (= [2 0] (:loc (get-in v [0 1]))))
+      (is (= [1 1] (:loc (get-in v [1 1]))))
+      (is (= [0 0] (:loc (get-in v [2 1]))))
+      (is (nil? (v 3))))))
