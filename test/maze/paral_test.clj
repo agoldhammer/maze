@@ -14,12 +14,16 @@
 
 (deftest test-closed-functions
   (testing "functions dealing with closed map"
+    (mpar/reset-all)
     (let [closed (atom {})
-          node (tu/make-dummy-node)]
+          node (tu/make-dummy-node)
+          ibuff (mbuff/hash-of-loc (:loc node) mp/nthreads)]
       (mbuff/put-closed closed node)
       (is (= node (mbuff/find-in-closed closed (:loc node))))
       (mbuff/remove-from-closed closed node)
-      (is (nil? (mbuff/find-in-closed closed (:loc node)))))))
+      (is (nil? (mbuff/find-in-closed closed (:loc node))))
+      (mbuff/put-closed (mbuff/closed-locs ibuff) node)
+      (is (= node (mbuff/find-in-closed (:loc node)))))))
 
 (deftest test-process-successors
   (testing "routing of successors for trivial maze"

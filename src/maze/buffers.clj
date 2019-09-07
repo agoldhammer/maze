@@ -123,10 +123,12 @@
 
 (defn find-in-closed
   "return node if in closed, nil otherwise"
-  ([node]
-   (let [loc (:loc node)
-         thr-num (hash-of-loc loc mp/nthreads)
-         closed (closed-locs thr-num)]
+  ([loc-or-node]
+   (let [loc (if (vector? loc-or-node)
+               loc-or-node
+               (:loc loc-or-node))
+         ibuff (hash-of-loc loc mp/nthreads)
+         closed (closed-locs ibuff)]
      (get @closed loc)))
   ([closed loc]
    (get @closed loc)))

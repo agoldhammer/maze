@@ -63,7 +63,6 @@
           (recur (mb/remainder frontier))))
       {:found false})))
 
-
 (defn filter-function-factory
   "return a function to pass a node
    if loc is unvisited or if its total-cost is less than old cost;
@@ -123,8 +122,6 @@
                 (mb/add-nodes! frontier unvisited))
               #_(println "frontier" frontier))
             (recur frontier)))))))
-
-
 
 (defn start-search
   "start a new search; print path overlaid result if doprint is true"

@@ -19,25 +19,22 @@
   [n create-fn init-val]
   `(mapv ~create-fn (repeat ~n ~init-val)))
 
-#_(defn reset-all
+(defn reset-all
   "reset buffers and counters"
   []
+  (mbuff/reset-all)
   (swap! incumbent merge {:cost Integer/MAX_VALUE :node nil})
   (swap! ctrl-wave-in-progress? (constantly false))
   (swap! should-terminate? (constantly false))
-  (doseq [[sym create-fn init] [[#'buffers atom #{}] [#'counters atom 0]
-                                [#'clocks atom 0] [#'tmaxes atom 0]
-                                [#'ctrl-msgs atom []]]]
-    (alter-var-root sym (constantly (create-thing mp/nthreads create-fn init)))))
+  #_(doseq [[sym create-fn init] [[#'buffers atom #{}] [#'counters atom 0]
+                                  [#'clocks atom 0] [#'tmaxes atom 0]
+                                  [#'ctrl-msgs atom []]]]
+      (alter-var-root sym (constantly (create-thing mp/nthreads create-fn init)))))
 
 (defmacro setup-future
   "set up ith future"
   [i func]
-  `(future (let [closed# (atom (hash-map))
-                 ;; don't need atom here because priq is mutable
-                 open# (mb/new-msg-priq [] 100)
-                 thread-num# ~i]
-             (~func closed# open# thread-num#))))
+  `(future-call #(~func (mbuff/input-buffs ~i) (mbuff/closed-locs ~i) (mbuff/open-qs ~i))))
 
 (defn create-futures
   "create n futures from setup-thread; func(closed, open, thread-num)"
@@ -50,7 +47,7 @@
   (let [loc (.loc node)
         newg (inc (.g node))
         succs (mu/successors loc)
-        goal @mp/goal*]
+        goal mp/goal*]
     ;; parent :loc becomes parent-loc of successor node
     (into [] (for [s succs]
                (mb/->Node s (:loc node) newg (mb/calc-heuristic s goal))))))
@@ -171,34 +168,36 @@
         #_(log thread-num "Putting" n')
         (put-buff open [(get-clock input) n'])))))
 
-#_(defn dpa
-    "distributed parallel astar algo
+(defn dpa
+  "distributed parallel astar algo
     this fn is to be fed to create thread bodies"
-  [closed open thread-num]
-  (while (not @should-terminate?)
-    (intake-from-buff closed open thread-num)
-    (expand-open closed open thread-num))
-  :terminated
-  )
+  [input closed open]
+  (while (not (:node @incumbent))
+    (intake-from-buff input closed open)
+    (expand-open closed open))
+  :terminated)
 
 ;; dpa development version, using dotimes instead of while
-#_(defn xdpa
-  [closed open thread-num]
+(defn xdpa
+  [input closed open]
   (dotimes [t 1]
-    (mu/log thread-num "starting")
+    #_(mu/log thread-num "starting")
     (do
       #_(log thread-num "calling intake")
-      (intake-from-buff closed open thread-num)
-      (expand-open closed open thread-num)))
-  (mb/deserted? open)
+      (intake-from-buff input closed open)
+      (expand-open closed open)))
   #_[closed open thread-num])
 
-#_(defn init-run
+(defn init-run
   "start the run by placing start node in buffers[0]"
   []
-  (reset-all)
-  (let [snode (mb/start-node)]
-    (put-buffer snode 0)))
+  (reset-all) ;; calls mbuff/reset-all, resets vars here and there
+  (let [snode (mb/start-node)
+        ibuff (mbuff/hash-of-loc (:loc (mb/start-node)) mp/nthreads)
+        rcvr (mbuff/input-buffs ibuff)
+        futs (create-futures mp/nthreads dpa)]
+    (mbuff/put-buff rcvr [0 snode])
+    futs))
 
 (defmacro readout
   "stringify readout of var"
@@ -224,32 +223,32 @@
       (println line))
     (println "---------")))
 
-;; TODO needs work !!!!
+;; TODO needs work -- rewrite as lazy-seq!!!!
 (defn pextract-path
   "extract the path from the closed-locs"
   [goal-node]
   (loop [path []
          node goal-node]
+    #_(println (format "path %s node %s" path node))
     (if (nil? node)
       path
       (let [{:keys [loc parent-loc]} node]
-        (if-let [next-node (mbuff/find-in-closed mbuff/closed-locs parent-loc)]
+        (if-let [next-node (mbuff/find-in-closed parent-loc)]
           (recur (conj path loc) next-node)
           (conj path loc)))
       #_(recur (conj path (:loc node)) (:parent node)))))
 
 (defn finish-up
   [doprint]
-  (let [path (pextract-path (:node @incumbent))]
-    (if (= {:cost @incumbent} Integer/MAX_VALUE)
-      (println "No path found")
-      (if doprint
-        (do
-          (doseq [ln (mo/a-overlay-path path)]
-            (println ln))
-          (println "Found: Path length: " (count path))
-          (mu/print-maze-params))
-        (println "Path length:" (count path))))))
+  (if-let [node (:node @incumbent)]
+    (let [path (pextract-path node)]
+      (when doprint
+        (doseq [ln (mo/a-overlay-path path)]
+          (println ln))
+        (mu/print-maze-params))
+      (println "Found: Path length: " (count path)))
+    (println "No path found"))
+  '***)
 
 ;; https://stackoverflow.com/questions/42700407/immediately-kill-a-running-future-thread
 #_(defn psearch-start
