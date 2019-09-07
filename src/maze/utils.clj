@@ -57,24 +57,24 @@
   ([size sparsity doprint]
    (let [base (make-bare-maze size sparsity)
          [start goal] (choose-start-finish size)]
-     (reset! mp/start* start)
-     (reset! mp/goal*  goal)
-     (reset! mp/size* size)
-     (reset! mp/sparsity* sparsity)
-     (reset! mp/maze*
-             (->
-              base
-              (update-maze start "S")
-              (update-maze goal "G"))))
+     (alter-var-root #'mp/start* (constantly start))
+     (alter-var-root #'mp/goal*  (constantly goal))
+     (alter-var-root #'mp/size* (constantly size))
+     (alter-var-root #'mp/sparsity* (constantly sparsity))
+     (alter-var-root #'mp/maze*
+                     (constantly (->
+                                   base
+                                   (update-maze start "S")
+                                   (update-maze goal "G")))))
    (when doprint
      (print-maze))))
 
 (defn print-maze-params
   "print just maze parameters, not maze itself"
   []
-  (println "Size:" @mp/size* " Sparsity:" @mp/sparsity*)
-  (println "Start:" @mp/start*)
-  (println "Goal:" @mp/goal*)
+  (println "Size:" mp/size* " Sparsity:" mp/sparsity*)
+  (println "Start:" mp/start*)
+  (println "Goal:" mp/goal*)
   (println "Max frontier size:" @mp/max-frontier-size))
 
 (defn print-maze
@@ -82,7 +82,7 @@
   ([] (print-maze true))
   ([doall]
    (when doall
-     (doseq [ln @mp/maze*]
+     (doseq [ln mp/maze*]
        (println ln)))
    (print-maze-params)))
 
@@ -97,13 +97,13 @@
   "is loc blocked?"
   [loc]
   (not= "x"
-        (get-in @mp/maze* loc)))
+        (get-in mp/maze* loc)))
 
 (defn successors
   "return vector of successors to loc"
   [loc]
   (let [[x y] loc
-        size @mp/size*
+        size mp/size*
         x- (dec x)
         x+ (inc x)
         y- (dec y)
@@ -119,7 +119,7 @@
 
 (defn at-goal?
   [loc]
-  (= loc @mp/goal*))
+  (= loc mp/goal*))
 
 (def log-agent (agent nil))
 

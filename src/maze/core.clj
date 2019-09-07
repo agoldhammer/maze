@@ -99,7 +99,7 @@
       ; else
       (let [working-node (mb/get-next! frontier)
             loc (.loc working-node)
-            parent (.parent working-node)]
+            parent (.parent-loc working-node)]
         (if (mu/at-goal? loc)
           (dosync
            (alter mp/a-visited* assoc loc {:cost nil :parent parent})
@@ -153,7 +153,7 @@
    (dosync (ref-set mp/a-visited* (hash-map)))
    (send mp/max-frontier-size (constantly 0) 0)
    (let [start-frontier (mb/astar-start-frontier)]
-     (let [{:keys [found]} (astar-search-maze start-frontier @mp/goal*)]
+     (let [{:keys [found]} (astar-search-maze start-frontier mp/goal*)]
        (if found
          (do
            (let [path (mo/extract-path)]
@@ -179,20 +179,20 @@
 (defn save-maze
   [fname]
   (let [f (clojure.java.io/file (str (get-proj-dir) fname ".maz"))]
-    (nippy/freeze-to-file f {:start @mp/start*
-                             :goal @mp/goal*
-                             :size @mp/size*
-                             :maze @mp/maze*}))
+    (nippy/freeze-to-file f {:start mp/start*
+                             :goal mp/goal*
+                             :size mp/size*
+                             :maze mp/maze*}))
   (println "Maze saved as" fname))
 
 (defn read-maze
   [fname]
   (let [f (clojure.java.io/file (str (get-proj-dir) fname ".maz"))
         parms (nippy/thaw-from-file f)]
-    (reset! mp/start* (:start parms))
-    (reset! mp/goal* (:goal parms))
-    (reset! mp/size* (:size parms))
-    (reset! mp/maze* (:maze parms)))
+    (alter-var-root #'mp/start* (constantly (:start parms)))
+    (alter-var-root #'mp/goal* (constantly (:goal parms)))
+    (alter-var-root #'mp/size* (constantly (:size parms)))
+    (alter-var-root #'mp/maze* (constantly (:maze parms))))
   (println "Read maze" fname))
 
 #_(defn psearch

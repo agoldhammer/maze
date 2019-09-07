@@ -7,7 +7,7 @@
   [path]
   ;; drop the starting node
   (let [reduced-path (drop 1 path)
-        maze @mp/maze*
+        maze mp/maze*
         index (map #(mod % 10) (range (count reduced-path)))
         indexed-path (partition 2 (interleave index reduced-path))]
     (reduce #(mu/update-maze %1 (second %2) (str (first %2))) maze indexed-path)))
@@ -18,7 +18,7 @@
   []
   ;; drop the starting node
   (let [a-visited @mp/a-visited*]
-    (loop [path [@mp/goal*]]
+    (loop [path [mp/goal*]]
       (let [loc (:parent (get a-visited (peek path)))]
         (if (nil? loc)
           path
@@ -31,4 +31,4 @@
   ; drop the start and goal points and reverse the path
   (let [reduced-path (drop 1 (rseq (subvec path 1)))
         indexed-path (partition 2 (interleave reduced-path (cycle (range 10))))]
-    (reduce #(mu/update-maze %1 (first %2) (str (second %2))) @mp/maze* indexed-path)))
+    (reduce #(mu/update-maze %1 (first %2) (str (second %2))) mp/maze* indexed-path)))

@@ -125,7 +125,7 @@
 (defn init-frontier
   "return a frontier with 1 node: loc start and path at start"
   []
-  (let [start-loc @mp/start*]
+  (let [start-loc mp/start*]
     [{:loc start-loc :path [start-loc]}]))
 
 (defn priority-queue
@@ -158,16 +158,16 @@
 (defn start-node
   "return start Node"
   []
-  (let [start @mp/start*]
+  (let [start mp/start*]
     (if (not= [] start)
-      (->Node start nil 0 (calc-heuristic start @mp/goal*))
+      (->Node start nil 0 (calc-heuristic start mp/goal*))
       nil)))
 
 (defn astar-start-frontier
   "return initial frontier (PriQ) for astar"
   []
-  (let [start @mp/start*]
-    (new-priq [(->Node start nil 0 (calc-heuristic start @mp/goal*))] 1000)))
+  (let [start mp/start*]
+    (new-priq [(->Node start nil 0 (calc-heuristic start mp/goal*))] 1000)))
 
 ;; TODO: remove later, used by unvisited cheaper succ, we don't use anymore
 (defn loc->Node
