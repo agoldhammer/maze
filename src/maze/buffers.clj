@@ -98,7 +98,7 @@
   
   (alter-var-root #'input-buffs (constantly (into [] (repeatedly mp/nthreads new-counted-buffer))))
   (alter-var-root #'open-qs (constantly (into [] (repeatedly mp/nthreads new-open-queue))))
-  (alter-var-root #'closed-locs (constantly (into [] (repeat mp/nthreads (atom {})))))
+  (alter-var-root #'closed-locs (constantly (into [] (repeatedly mp/nthreads #(atom {})))))
   
   #_(doseq [[sym create-fn init] [[#'buffers atom #{}] [#'counters atom 0]
                                   [#'clocks atom 0] [#'tmaxes atom 0]

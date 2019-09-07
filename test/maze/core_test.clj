@@ -63,30 +63,6 @@
           succs (mpar/make-successor-nodes start)]
       (is (= (count succs) 3)))))
 
-
-
-(deftest test-get-buffer
-  (testing "testing get from numbered buffer"
-    (setup-trivial-test)
-    (let [nodes (into [] (map mpar/take-buffer (range mp/nthreads)))
-          start-in-buff? (some #(= (mb/start-node) %) nodes)]
-      (is (true? start-in-buff?))
-      (is (= 0 (reduce + (mapv deref mpar/counters)))))))
-
-
-
-;; this test will fail if mp/nthreads != 4
-(deftest test-initial-load
-  (testing "loading of start node into open queue"
-    (setup-trivial-test)
-    (mpar/init-run)
-    (is (= [0 (mb/start-node)] (first @(mpar/buffers 3))))
-    (let [futs (mpar/create-futures mp/nthreads mpar/xdpa)]
-      ;; start node of trivial maze lands in buffer[3] when mp/nthreads=4
-      (is (= [true true true true] (mapv deref futs)))
-      (is (= [1 1 1 0] (mapv #(count (deref %)) mpar/buffers)))
-      (is (= [1 0 0 2] (mapv deref mpar/counters))))))
-
 ;; testing termination detection functions
 
 (deftest test-initiate-control-wave
@@ -107,27 +83,6 @@
       (is (= [1 0 false 0] (peek @(mpar/ctrl-msgs 0))))
       (is (= :terminated (mpar/process-ctrl-msg 0))))))
 
-(deftest test-msg-queue
-  (testing "priority queue of time-stamped messages"
-    (setup-trivial-maze)
-    (let [mpq (mb/new-msg-priq [] 100)
-          test-node (mb/start-node)
-          bigger-node (mb/->Node [10 20] test-node 100 200)]
-      (mb/add-nodes! mpq [[0 test-node] [0 bigger-node]])
-      (is (= [0 test-node] (mb/get-next! mpq)))
-      (is (= [0 bigger-node] (mb/get-next! mpq))))))
 
-(deftest test-put-take-open
-  (testing "frontier management functions in parallel case"
-    (mpar/reset-all)
-    (setup-trivial-maze)
-    (let [open (mb/new-msg-priq [] 100)
-          node (mb/start-node)]
-      (mpar/put-open open node 0)
-      (is (= 1 @(mpar/counters 0)))
-      (is (= node (mpar/take-open open 0)))
-      (is (= 0 @(mpar/counters 0)))
-      (is (= 0 @(mpar/tmaxes 0)))
-      (is (nil? (mpar/take-open open 0))))))
 
 

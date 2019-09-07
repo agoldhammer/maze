@@ -11,25 +11,15 @@
 
 (def incumbent (atom {:node nil :cost Integer/MAX_VALUE}))
 
-#_(defn compute-recipient
-  "compute recipient of Node based on hash of its .loc
-    Want all nodes with same loc to be processed by same thread"
-  [node]
-  (mod (hash (:loc node)) mp/nthreads))
-
-(def buffers [])
-(def clocks [])
-(def counters [])
-(def tmaxes [])
 (def ctrl-msgs [])
 (def ctrl-wave-in-progress? (atom false))
 (def should-terminate? (atom false))
 
-(defmacro create-thing
+#_(defmacro create-thing
   [n create-fn init-val]
   `(mapv ~create-fn (repeat ~n ~init-val)))
 
-(defn reset-all
+#_(defn reset-all
   "reset buffers and counters"
   []
   (swap! incumbent merge {:cost Integer/MAX_VALUE :node nil})
@@ -39,68 +29,6 @@
                                 [#'clocks atom 0] [#'tmaxes atom 0]
                                 [#'ctrl-msgs atom []]]]
     (alter-var-root sym (constantly (create-thing mp/nthreads create-fn init)))))
-
-;; puts and takes to thread buffer are 'timestamped messages' in the sense of Mattern paper
-;; A mesg is a vector [CLOCK, node]
-;; this is SEND in Mattern's terminology
-#_(defn put-buffer
-  "put a node from thread 'sender' (thread-num) in buffer[compute-recipient(node)]
-    update counter and clock for the sender"
-  [node sender]
-  (let [receiver (compute-recipient node)
-        buffer (buffers receiver)
-        counter (counters sender)
-        clock (clocks sender)]
-    ;; implements send portion of Mattern protocol, lines 1-2, p. 166
-    #_(swap! clock inc)
-    (swap! counter inc)
-    (swap! buffer conj [@clock node])))
-
-#_(defn put-vec-to-buffer
-  "put a vector of nodes in buffers[compute-recipient(node)], update send-counters[i]"
-  [nodes sender]
-  {:pre [(vector? nodes)]}
-  (doseq [node nodes]
-    (put-buffer node sender)))
-
-#_(defn take-buffer
-  "get and remove first node from numbered buffer; return nil if buffer empty;
-    update counter and tmax for the receiver"
-  [receiver]
-  ;; a msg is a vector [tstamp node], per Mattern paper
-  (let [buffer (buffers receiver)
-        counter (counters receiver)
-        tmax (tmaxes receiver)
-        msg (first @buffer)
-        [tstamp node] msg ]
-    ;; tmax for the receiver is set to max of tmax and time stamp
-    ;; counter is decremented to register receipt
-    (when node
-      (swap! buffer disj msg)
-      (swap! counter dec)
-      (swap! tmax max tstamp))
-    node))
-
-#_(defn put-open
-  "add [clock+1 node] msg to open (msg priority) queue; update counter"
-  [open node thread-num]
-  (let [counter (counters thread-num)
-        clock (clocks thread-num)]
-    ;; implements send portion of Mattern protocol, lines 1-2, p. 166
-    #_(swap! clock inc)
-    (swap! counter inc)
-    (mb/add-nodes! open [[@clock node]]))
-  
-  (defn take-open
-    "take lowest-cost msg [clock node] from open queue"
-    [open thread-num]
-    (let [counter (counters thread-num)
-          tmax (tmaxes thread-num)
-          [tstamp node] (mb/get-next! open)]
-      (when node
-        (swap! counter dec)
-        (swap! tmax max tstamp))
-      node)))
 
 (defmacro setup-future
   "set up ith future"
@@ -137,7 +65,7 @@
     (ctrl-msgs next-thread)))
 
 ;; Mattern p 167 steps 13-14
-(defn initiate-ctrl-wave
+#_(defn initiate-ctrl-wave
   "initiate control wave from thread 0 if goal has been reached
     and no control wave already in progress"
   []
@@ -150,7 +78,7 @@
             msg [clock count false 0]]
         (swap! (next-recip 0) conj msg)))))
 
-(defn process-ctrl-msg
+#_(defn process-ctrl-msg
   "process control msg from thread j"
   [j]
   ;; msg format is [time accu invalid init]
@@ -181,7 +109,7 @@
         :continue))
     :continue))
 
-(defn termination-detector
+#_(defn termination-detector
   "term detection functions to run in thread"
   []
   (loop [stop? false]
@@ -195,7 +123,7 @@
               stop? (= :terminated (ctrls 0))]
           (recur stop?))))))
 
-(defn create-termination-detector
+#_(defn create-termination-detector
   "run the termination detection algo in its own thread"
   []
   (future-call termination-detector))
