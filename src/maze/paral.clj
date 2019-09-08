@@ -229,14 +229,12 @@
   [goal-node]
   (loop [path []
          node goal-node]
-    #_(println (format "path %s node %s" path node))
     (if (nil? node)
       path
       (let [{:keys [loc parent-loc]} node]
         (if-let [next-node (mbuff/find-in-closed parent-loc)]
           (recur (conj path loc) next-node)
-          (conj path loc)))
-      #_(recur (conj path (:loc node)) (:parent node)))))
+          (conj path loc))))))
 
 (defn finish-up
   [doprint]
