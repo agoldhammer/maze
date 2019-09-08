@@ -11,4 +11,7 @@ pom.xml.asc
 .hgignore
 .hg/
 *.code-workspace
-*.maz
+test-maze.maz
+failing.maz
+maze.maz
+
