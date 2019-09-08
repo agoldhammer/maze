@@ -16,6 +16,11 @@ jobs:
 
     working_directory: ~/repo
 
+    general:
+      branches:
+        only:
+          - par
+
     environment:
       LEIN_ROOT: "true"
       # Customize the JVM maximum heap limit
@@ -39,4 +44,4 @@ jobs:
           key: v1-dependencies-{{ checksum "project.clj" }}
 
       # run tests!
-      - run: lein test
+      # - run: lein test
