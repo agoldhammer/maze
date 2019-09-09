@@ -96,7 +96,8 @@
   (swap! incumbent merge {:cost Integer/MAX_VALUE :node nil})
   (swap! ctrl-wave-in-progress? (constantly false))
   
-  (alter-var-root #'input-buffs (constantly (into [] (repeatedly mp/nthreads new-counted-buffer))))
+  #_(alter-var-root #'input-buffs (constantly (into [] (repeatedly mp/nthreads new-counted-buffer))))
+  (alter-var-root #'input-buffs (constantly (into [] (repeatedly mp/nthreads new-open-queue))))
   (alter-var-root #'open-qs (constantly (into [] (repeatedly mp/nthreads new-open-queue))))
   (alter-var-root #'closed-locs (constantly (into [] (repeatedly mp/nthreads #(atom {})))))
   

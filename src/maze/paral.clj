@@ -14,6 +14,7 @@
 (def ctrl-msgs [])
 (def ctrl-wave-in-progress? (atom false))
 (def should-terminate? (atom false))
+(def started? (atom false))
 
 #_(defmacro create-thing
   [n create-fn init-val]
@@ -26,6 +27,7 @@
   (swap! incumbent merge {:cost Integer/MAX_VALUE :node nil})
   (swap! ctrl-wave-in-progress? (constantly false))
   (swap! should-terminate? (constantly false))
+  (swap! started? (constantly false))
   #_(doseq [[sym create-fn init] [[#'buffers atom #{}] [#'counters atom 0]
                                   [#'clocks atom 0] [#'tmaxes atom 0]
                                   [#'ctrl-msgs atom []]]]
@@ -168,11 +170,28 @@
         #_(log thread-num "Putting" n')
         (put-buff open [(get-clock input) n'])))))
 
+(defn can-terminate?
+  "can this thread terminate?"
+  [input]
+  (if false #_(and @started? ; if started and all queues empty, we are done
+           (= 0 (reduce + (concat (mapv mbuff/get-count mbuff/input-buffs)
+                                  (mapv mbuff/get-count mbuff/open-qs)))))
+    true
+    (let [at-goal? (:node @incumbent)]
+      (if at-goal?
+        (let [incumb-cost (:cost @incumbent)]
+          (if-let [[_ next-node] (mbuff/quickpeek input)]
+            (if (< (mb/node-total-cost next-node) incumb-cost)
+              false
+              true)
+            true))
+        false))))
+
 (defn dpa
   "distributed parallel astar algo
     this fn is to be fed to create thread bodies"
   [input closed open]
-  (while (not (:node @incumbent))
+  (while (not (can-terminate? input))
     (intake-from-buff input closed open)
     (expand-open closed open))
   :terminated)
@@ -197,6 +216,7 @@
         rcvr (mbuff/input-buffs ibuff)
         futs (create-futures mp/nthreads dpa)]
     (mbuff/put-buff rcvr [0 snode])
+    (swap! started? (constantly true))
     futs))
 
 (defmacro readout
@@ -249,25 +269,21 @@
   '***)
 
 ;; https://stackoverflow.com/questions/42700407/immediately-kill-a-running-future-thread
-#_(defn psearch-start
+(defn psearch
   "start a new || astar search; print path overlaid result if doprint is true"
   ([]
-   (psearch-start true))
+   (psearch true))
   ([doprint]
-   (reset-all)
-   (init-run)
    (println "Searching maze")
-   (let [rets (create-futures mp/nthreads dpa)
-         res (mapv #(deref % 5000 :timedout) rets)
-         term-detector (create-termination-detector)]
-     (if @should-terminate?
+   (let [futs (init-run)
+         terms (mapv #(deref % 10000 :timed-out) futs)]
+     (if (every? #(= :terminated %) terms)
        (do
          (println "All terminated")
          (finish-up doprint))
        (do
-         (println "Error:" res)
-         (map future-cancel rets)
-         (future-cancel term-detector)
-         (pstatus))))))
+         (println "Error:" terms)
+         (map future-cancel futs)))
+     futs)))
 
 
