@@ -142,10 +142,10 @@
            (mu/print-maze-params))
          (println "No path was found"))))))
 
-(defn start-astar-search
+(defn astar
   "start a new astar search; print path overlaid result if doprint is true"
   ([]
-   (start-astar-search true))
+   (astar true))
   ([doprint]
    (dosync (ref-set mp/a-visited* (hash-map)))
    (send mp/max-frontier-size (constantly 0) 0)
@@ -192,11 +192,18 @@
     (alter-var-root #'mp/maze* (constantly (:maze parms))))
   (println "Read maze" fname))
 
-(defn psearch
+(defn pstar
+  "do parallel astar search, print if doprint true"
   ([]
-   (psearch true))
+   (pstar true))
   ([doprint]
    (mpar/psearch doprint)))
+
+(defn compstar
+  "compare astar and pstar"
+  [doprint]
+  (time (astar doprint))
+  (time (pstar doprint)))
 
 (defn -main
   "I don't do a whole lot ... yet."
