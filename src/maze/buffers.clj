@@ -93,8 +93,8 @@
 (defn reset-all
   "reset buffers and counters"
   []
-  (swap! incumbent merge {:cost Integer/MAX_VALUE :node nil})
-  (swap! ctrl-wave-in-progress? (constantly false))
+  (reset! incumbent {:cost Integer/MAX_VALUE :node nil})
+  (reset! ctrl-wave-in-progress? false)
   
   #_(alter-var-root #'input-buffs (constantly (into [] (repeatedly mp/nthreads new-counted-buffer))))
   (alter-var-root #'input-buffs (constantly (into [] (repeatedly mp/nthreads new-open-queue))))

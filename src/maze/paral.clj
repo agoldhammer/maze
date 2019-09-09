@@ -24,10 +24,10 @@
   "reset buffers and counters"
   []
   (mbuff/reset-all)
-  (swap! incumbent merge {:cost Integer/MAX_VALUE :node nil})
-  (swap! ctrl-wave-in-progress? (constantly false))
-  (swap! should-terminate? (constantly false))
-  (swap! started? (constantly false))
+  (reset! incumbent {:cost Integer/MAX_VALUE :node nil})
+  (reset! ctrl-wave-in-progress? false)
+  (reset! should-terminate? false)
+  (reset! started? false)
   #_(doseq [[sym create-fn init] [[#'buffers atom #{}] [#'counters atom 0]
                                   [#'clocks atom 0] [#'tmaxes atom 0]
                                   [#'ctrl-msgs atom []]]]

@@ -1,18 +1,18 @@
 (ns maze.buff-test
-  (:require [clojure.test :refer [deftest is are testing use-fixtures]]
+  (:require #_[clojure.test :refer [deftest is are testing use-fixtures]]
             [maze.buffers :as mbuff]
-            [maze.base :as mb]
+            #_[maze.base :as mb]
             [taoensso.timbre :as log]
             #_[maze.core :as mc]
             #_[maze.paral :as mpar]
-            [maze.params :as mp]))
+            #_[maze.params :as mp]))
 
 (def flag (promise))
 (def can-finish? (atom false))
 (def cbuffs (into [] (repeatedly 4 mbuff/new-counted-buffer)))
 (def should-terminate? (atom false))
 
-(defn make-dummy-node
+#_(defn make-dummy-node
   "make a dummy node"
   []
   (let [x (rand-int 100)
@@ -22,12 +22,12 @@
     ;; loc parent g h
     (apply mb/->Node [[x y] [(inc x) y] g h])))
 
-(defn make-vec-of-nodes
+#_(defn make-vec-of-nodes
   [n]
   (into [] (repeatedly n make-dummy-node)))
 
 
-(defn feed-buffs
+#_(defn feed-buffs
   [n]
   (when (= @flag 42)
     (let [v (make-vec-of-nodes n)]
@@ -36,7 +36,7 @@
       (swap! can-finish? not)
       (mapv mbuff/get-count cbuffs))))
 
-(defn pump-buff
+#_(defn pump-buff
   [i]
   (future
     (let [buff (cbuffs i)]
@@ -49,7 +49,7 @@
               (recur (conj accum msg))))
           accum)))))
 
-(defn pump-buffs
+#_(defn pump-buffs
   []
   (when (= @flag 42)
     (let [future-contents
@@ -63,7 +63,7 @@
             (recur (mapv mbuff/get-count cbuffs)))))
       future-contents)))
 
-(defn reset-test-env
+#_(defn reset-test-env
   []
   (swap! should-terminate? (constantly false))
   (swap! can-finish? (constantly false))
@@ -71,7 +71,7 @@
   (alter-var-root #'cbuffs (constantly (into [] (repeatedly 4 mbuff/new-counted-buffer))))
   (alter-var-root #'flag (constantly (promise))))
 
-(defn tst
+#_(defn tst
   []
   (reset-test-env)
   #_(alter-var-root #'feeds (constantly (future (feed-buffs 1200))))
@@ -84,7 +84,7 @@
   #_(println "pumps" pumps))
 
 
-(deftest test-buff-put-take
+#_(deftest test-buff-put-take
   (testing "puts and takes"
     (reset-test-env)
     (future (feed-buffs 20))
@@ -94,7 +94,7 @@
           res (pump-buffs)]
       (is (= load-counts (mapv count (mapv deref res)))))))
 
-(defn feed-input-buffs
+#_(defn feed-input-buffs
   [n]
   (mbuff/reset-all)
   (log/info "starting")
