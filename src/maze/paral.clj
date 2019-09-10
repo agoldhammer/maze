@@ -28,6 +28,7 @@
   (reset! ctrl-wave-in-progress? false)
   (reset! should-terminate? false)
   (reset! started? false)
+  (alter-var-root #'ctrl-msgs (constantly (vec (repeatedly (* 2 mp/nthreads) #(atom [])))))
   #_(doseq [[sym create-fn init] [[#'buffers atom #{}] [#'counters atom 0]
                                   [#'clocks atom 0] [#'tmaxes atom 0]
                                   [#'ctrl-msgs atom []]]]
@@ -63,24 +64,38 @@
   (let [next-thread (mod (inc j) mp/nthreads)]
     (ctrl-msgs next-thread)))
 
+;; control registers are the concatenation of input-buffs and open-qs from mbuff
+
+(defn update-clock-and-get-control-reg-state
+  "get the state of the nth control register"
+  [register]
+  (let [clock (mbuff/inc-clock register)
+        count (mbuff/get-count register)]
+    [clock count]))
+
+(defn ctrl-wave
+  "run control wave through sequence of registers"
+  [registers]
+  (let [initial-partial-msg (update-clock-and-get-control-reg-state (registers 0))]
+    (into initial-partial-msg [false 0])))
+
 ;; Mattern p 167 steps 13-14
-#_(defn initiate-ctrl-wave
-  "initiate control wave from thread 0 if goal has been reached
-    and no control wave already in progress"
+(defn start-ctrl-thread
+  "initiate control thread; does control wave every 20 ms"
   []
-  (when (and (not @ctrl-wave-in-progress?)
-             (:node @incumbent))
-    (do 
-      (swap! ctrl-wave-in-progress? (constantly true))
-      (let [clock (swap! (clocks 0) inc)
-            count @(counters 0)
-            msg [clock count false 0]]
-        (swap! (next-recip 0) conj msg)))))
+  (let [control-regs (into mbuff/input-buffs mbuff/open-qs)
+        #_clock #_(swap! (clocks 0) inc)
+        #_count #_@(counters 0)
+        #_msg #_[clock count false 0]]
+    #_(swap! (next-recip 0) conj msg)
+    (ctrl-wave control-regs)))
+
+
 
 #_(defn process-ctrl-msg
-  "process control msg from thread j"
-  [j]
-  ;; msg format is [time accu invalid init]
+    "process control msg from thread j"
+    [j]
+    ;; msg format is [time accu invalid init]
   (if @ctrl-wave-in-progress?
     (let [rcvr (ctrl-msgs j)]
       (if-let [msg (peek @rcvr)]

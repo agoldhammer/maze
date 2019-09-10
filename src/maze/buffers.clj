@@ -14,6 +14,7 @@
   (get-tmax [this] "return tmax for this buffer")
   (get-clock [this] "return the clock")
   (set-clock [this time] "set the clock to `time`")
+  (inc-clock [this] "increment the clock and return new time")
   (take-buff [this] "take next basic msg, blocking if none")
   (poll-buff [this] "take next basic msg if present")
   (put-buff [this time-stamped-msg] "add basic msg")
@@ -47,6 +48,8 @@
     @(.clock this))
   (set-clock [this time]
     (reset! (.clock this) time))
+  (inc-clock [this]
+    (swap! (.clock this) inc))
   (take-buff [this]
     (let [[clock payload] (.take (.buff this))]
       (swap! (.tmax this) max clock)
@@ -57,11 +60,11 @@
           [clock payload])
       nil))
   (put-buff [this time-stamped-msg]
-            (.put (.buff this) time-stamped-msg))
+    (.put (.buff this) time-stamped-msg))
   (vide? [this]
-         (.isEmpty (.buff this)))
+    (.isEmpty (.buff this)))
   (quickpeek [this]
-             (.peek (.buff this))))
+    (.peek (.buff this))))
 
 (defn hash-of-loc
   "compute hash of loc of node"
