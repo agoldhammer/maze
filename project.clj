@@ -5,7 +5,8 @@
             :url "https://www.eclipse.org/legal/epl-2.0/"}
   :dependencies [[org.clojure/clojure "1.10.0"]
                  [com.taoensso/nippy "2.14.0"]
-                 [com.taoensso/timbre "4.10.0"]]
+                 [com.taoensso/timbre "4.10.0"]
+                 [criterium "0.4.5"]]
   :main ^:skip-aot maze.core
   :target-path "target/%s"
   :profiles {:uberjar {:aot :all}})

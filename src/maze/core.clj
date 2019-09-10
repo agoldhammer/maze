@@ -4,7 +4,8 @@
             [maze.base :as mb]
             [maze.overlay :as mo]
             [maze.utils :as mu :refer [make-maze]]
-            [maze.paral :as mpar])
+            [maze.paral :as mpar]
+            #_[criterium.core :as cr])
   (:gen-class))
 
 (def DEBUG 0)
@@ -203,7 +204,8 @@
   "compare astar and pstar"
   [doprint]
   (time (astar doprint))
-  (time (pstar doprint)))
+  (time (pstar doprint))
+  #_(cr/execute-expression 1 pstar))
 
 (defn -main
   "I don't do a whole lot ... yet."
