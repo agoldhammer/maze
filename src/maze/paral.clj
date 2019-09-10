@@ -11,7 +11,7 @@
 
 (def incumbent (atom {:node nil :cost Integer/MAX_VALUE}))
 
-(def ctrl-msgs [])
+(def ctrl-clock (atom 0))
 (def ctrl-wave-in-progress? (atom false))
 (def should-terminate? (atom false))
 (def started? (atom false))
@@ -24,11 +24,12 @@
   "reset buffers and counters"
   []
   (mbuff/reset-all)
+  (reset! ctrl-clock (atom 0))
   (reset! incumbent {:cost Integer/MAX_VALUE :node nil})
   (reset! ctrl-wave-in-progress? false)
   (reset! should-terminate? false)
   (reset! started? false)
-  (alter-var-root #'ctrl-msgs (constantly (vec (repeatedly (* 2 mp/nthreads) #(atom [])))))
+  #_(alter-var-root #'ctrl-msgs (constantly (vec (repeatedly (* 2 mp/nthreads) #(atom [])))))
   #_(doseq [[sym create-fn init] [[#'buffers atom #{}] [#'counters atom 0]
                                   [#'clocks atom 0] [#'tmaxes atom 0]
                                   [#'ctrl-msgs atom []]]]
@@ -58,7 +59,7 @@
 
 ;;--------------termination detection--------------
 ;; for details of termination algorithm, see Mattern 1987 paper, section 6, p. 166
-(defn next-recip
+#_(defn next-recip
   "return the next agent to receive a control message"
   [j]
   (let [next-thread (mod (inc j) mp/nthreads)]
@@ -66,65 +67,72 @@
 
 ;; control registers are the concatenation of input-buffs and open-qs from mbuff
 
-(defn update-clock-and-get-control-reg-state
-  "get the state of the nth control register"
+(defn get-control-reg-state
+  "increment clock and get the state of a control register"
   [register]
-  (let [clock (mbuff/inc-clock register)
-        count (mbuff/get-count register)]
-    [clock count]))
-
-(defn ctrl-wave
-  "run control wave through sequence of registers"
-  [registers]
-  (let [initial-partial-msg (update-clock-and-get-control-reg-state (registers 0))]
-    (into initial-partial-msg [false 0])))
+  (let [clock (mbuff/get-clock register)
+        count (mbuff/get-count register)
+        tmax (mbuff/get-tmax register)]
+    [clock count tmax]))
 
 ;; Mattern p 167 steps 13-14
-(defn start-ctrl-thread
-  "initiate control thread; does control wave every 20 ms"
+(defn make-first-ctrl-msg
+  "initiate control wave with first message"
+  [register0]
+  (let [clock (mbuff/inc-clock register0)
+        count (mbuff/get-count register0)]
+    [clock count false 0]))
+
+(defn modify-msg
+  "take an input message and register and modify according to Mattern algo to produce output message"
+  [input-msg register]
+  (let [[time accu invalid init] input-msg
+        [clock count tmax] (get-control-reg-state register)
+        new-clock (max time clock)]
+    (mbuff/set-clock register new-clock)
+    [time (+ accu count) (or invalid (>= tmax time)) init]))
+
+(defn run-wave
+  "run the control wave"
   []
   (let [control-regs (into mbuff/input-buffs mbuff/open-qs)
-        #_clock #_(swap! (clocks 0) inc)
-        #_count #_@(counters 0)
-        #_msg #_[clock count false 0]]
-    #_(swap! (next-recip 0) conj msg)
-    (ctrl-wave control-regs)))
+        msg0 (make-first-ctrl-msg (first control-regs))
+        [_ accu invalid _] (reduce modify-msg msg0 (rest control-regs))]
+    [accu invalid]
+    ))
 
 
 
-#_(defn process-ctrl-msg
-    "process control msg from thread j"
-    [j]
+#_(defn run-wave
+  "run wave over control registers from 0"
+  [registers]
     ;; msg format is [time accu invalid init]
-  (if @ctrl-wave-in-progress?
-    (let [rcvr (ctrl-msgs j)]
-      (if-let [msg (peek @rcvr)]
-        (do
-          (swap! rcvr pop)
-          (let [clock (clocks j)
-                [time accu invalid init] msg]
-            #_(println "rcvd msg" msg "init" init)
-            (swap! clock max time)
-            ;; check for complete round; initiating thread is always 0
-            (if (= init j)
-              (do
-                (swap! ctrl-wave-in-progress? (constantly false))
-                (if (and (zero? accu)
-                         (not invalid))
-                  :terminated
-                  :continue))
-              (let [count @(counters j)
-                    tmax @(tmaxes j)
-                    new-invalid (or invalid (>= tmax time))]
-                #_(println "sending to" (next-recip j))
-                ;; pass message on to next recipient
-                (swap! (next-recip j) conj [time (+ accu count) new-invalid init])
-                :continue))))
-        :continue))
-    :continue))
+  (dotimes [i (count registers)]
+    (let [[clock count tmax] (update-clock-and-get-control-reg-state (registers i))]
+      (let [clock (clocks j)
+            [time accu invalid init] msg]
+        #_(println "rcvd msg" msg "init" init)
+        (swap! clock max time)
+        ;; check for complete round; initiating thread is always 0
+        (if (= init j)
+          (do
+            (swap! ctrl-wave-in-progress? (constantly false))
+            (if (and (zero? accu)
+                     (not invalid))
+              :terminated
+              :continue))
+          (let [count @(counters j)
+                tmax @(tmaxes j)
+                new-invalid (or invalid (>= tmax time))]
+            #_(println "sending to" (next-recip j))
+            ;; pass message on to next recipient
+            (swap! (next-recip j) conj [time (+ accu count) new-invalid init])
+            :continue)))
+      :continue))
+  :continue)
 
 #_(defn termination-detector
-  "term detection functions to run in thread"
+    "term detection functions to run in thread"
   []
   (loop [stop? false]
     (if stop?
