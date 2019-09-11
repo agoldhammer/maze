@@ -106,12 +106,13 @@
     indicating no path found; should therefore terminate all threads, including this one"
   []
   (while (not @path-not-found?)
+    (Thread/sleep 1000)
     (let [[accu invalid] (run-wave)]
       (when (and (zero? accu)
                  (not invalid))
         (reset! path-not-found? true)
         (reset! should-terminate? true)))
-    (Thread/sleep 50))
+    #_(Thread/sleep 50))
   :nfd-terminated)
 
 ;; end of termination detection ----------------------------------
@@ -211,29 +212,7 @@
         :no-path
         :ok))))
 
-(defmacro readout
-  "stringify readout of var"
-  [v]
-  `(if (vector? ~v)
-     (str (name (quote ~v)) ": " (mapv deref ~v))
-     (str (name (quote ~v)) ": " @~v)))
 
-(defn xstatus
-  "returns vector of strings giving readout of quoted vars specified in xs;
-    the xs must be derefable"
-  [xs]
-  (mapv eval 
-        (into []
-              (partition 2 (interleave (repeatedly (constantly  `readout)) xs)))))
-
-(defn pstatus
-  "prints out the results of xstatus in human-readable form for key variables of the algo"
-  []
-  (let [xs [`buffers `counters `clocks `tmaxes `ctrl-msgs `ctrl-wave-in-progress?
-            `should-terminate? `incumbent]]
-    (doseq [line (xstatus xs)]
-      (println line))
-    (println "---------")))
 
 ;; TODO needs work -- rewrite as lazy-seq!!!!
 (defn pextract-path
@@ -289,4 +268,28 @@
     (println "should-term" @should-terminate?)
     (println "path-not" @path-not-found?)))
 
+(comment
+ (defmacro readout
+   "stringify readout of var"
+   [v]
+   `(if (vector? ~v)
+      (str (name (quote ~v)) ": " (mapv deref ~v))
+      (str (name (quote ~v)) ": " @~v)))
+ 
+ (defn xstatus
+   "returns vector of strings giving readout of quoted vars specified in xs;
+    the xs must be derefable"
+   [xs]
+   (mapv eval
+         (into []
+               (partition 2 (interleave (repeatedly (constantly  `readout)) xs)))))
+ 
+ (defn pstatus
+   "prints out the results of xstatus in human-readable form for key variables of the algo"
+   []
+   (let [xs [`buffers `counters `clocks `tmaxes `ctrl-msgs `ctrl-wave-in-progress?
+             `should-terminate? `incumbent]]
+     (doseq [line (xstatus xs)]
+       (println line))
+     (println "---------"))))
 

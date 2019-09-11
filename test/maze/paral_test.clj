@@ -75,7 +75,7 @@
     (reset! test1 @mpar/should-terminate?)
     (Thread/sleep (rand-int 50))
     (mbuff/take-buff (mbuff/input-buffs 0))
-    (Thread/sleep 500)
+    (Thread/sleep 1500)
     (reset! test2 @mpar/should-terminate?)
     (future-cancel fut)
     (if (and (not @test1) @test2)
