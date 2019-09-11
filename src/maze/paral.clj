@@ -14,7 +14,7 @@
 (def ctrl-clock (atom 0))
 (def ctrl-wave-in-progress? (atom false))
 (def should-terminate? (atom false))
-(def started? (atom false))
+(def path-not-found? (atom false))
 
 #_(defmacro create-thing
   [n create-fn init-val]
@@ -28,7 +28,7 @@
   (reset! incumbent {:cost Integer/MAX_VALUE :node nil})
   (reset! ctrl-wave-in-progress? false)
   (reset! should-terminate? false)
-  (reset! started? false)
+  (reset! path-not-found? false)
   #_(alter-var-root #'ctrl-msgs (constantly (vec (repeatedly (* 2 mp/nthreads) #(atom [])))))
   #_(doseq [[sym create-fn init] [[#'buffers atom #{}] [#'counters atom 0]
                                   [#'clocks atom 0] [#'tmaxes atom 0]
@@ -101,54 +101,18 @@
     [accu invalid]
     ))
 
-
-
-#_(defn run-wave
-  "run wave over control registers from 0"
-  [registers]
-    ;; msg format is [time accu invalid init]
-  (dotimes [i (count registers)]
-    (let [[clock count tmax] (update-clock-and-get-control-reg-state (registers i))]
-      (let [clock (clocks j)
-            [time accu invalid init] msg]
-        #_(println "rcvd msg" msg "init" init)
-        (swap! clock max time)
-        ;; check for complete round; initiating thread is always 0
-        (if (= init j)
-          (do
-            (swap! ctrl-wave-in-progress? (constantly false))
-            (if (and (zero? accu)
-                     (not invalid))
-              :terminated
-              :continue))
-          (let [count @(counters j)
-                tmax @(tmaxes j)
-                new-invalid (or invalid (>= tmax time))]
-            #_(println "sending to" (next-recip j))
-            ;; pass message on to next recipient
-            (swap! (next-recip j) conj [time (+ accu count) new-invalid init])
-            :continue)))
-      :continue))
-  :continue)
-
-#_(defn termination-detector
-    "term detection functions to run in thread"
+(defn not-found-detector
+  "detect situation in which all input-buffs and open-qs are empty,
+    indicating no path found; should therefore terminate all threads, including this one"
   []
-  (loop [stop? false]
-    (if stop?
-      (swap! should-terminate? (constantly true))
-      (do 
-        (when (not @ctrl-wave-in-progress?)
-          (initiate-ctrl-wave))
-        ;; read ctrl msgs for each thread
-        (let [ctrls (mapv process-ctrl-msg (range mp/nthreads))
-              stop? (= :terminated (ctrls 0))]
-          (recur stop?))))))
-
-#_(defn create-termination-detector
-  "run the termination detection algo in its own thread"
-  []
-  (future-call termination-detector))
+  (while (not @path-not-found?)
+    (let [[accu invalid] (run-wave)]
+      (when (and (zero? accu)
+                 (not invalid))
+        (reset! path-not-found? true)
+        (reset! should-terminate? true)))
+    (Thread/sleep 50))
+  :nfd-terminated)
 
 ;; end of termination detection ----------------------------------
 
@@ -196,9 +160,7 @@
 (defn can-terminate?
   "can this thread terminate?"
   [input]
-  (if false #_(and @started? ; if started and all queues empty, we are done
-           (= 0 (reduce + (concat (mapv mbuff/get-count mbuff/input-buffs)
-                                  (mapv mbuff/get-count mbuff/open-qs)))))
+  (if @should-terminate? 
     true
     (let [at-goal? (:node @incumbent)]
       (if at-goal?
@@ -217,6 +179,7 @@
   (while (not (can-terminate? input))
     (intake-from-buff input closed open)
     (expand-open closed open))
+  (reset! should-terminate? true)
   :terminated)
 
 ;; dpa development version, using dotimes instead of while
@@ -239,8 +202,14 @@
         rcvr (mbuff/input-buffs ibuff)
         futs (create-futures mp/nthreads dpa)]
     (mbuff/put-buff rcvr [0 snode])
-    (swap! started? (constantly true))
-    futs))
+    (let [nfd (future-call not-found-detector)
+          threads (conj futs nfd)]
+      (while (not @should-terminate?)
+        (Thread/sleep 2))
+      (mapv future-cancel threads)
+      (if @path-not-found?
+        :no-path
+        :ok))))
 
 (defmacro readout
   "stringify readout of var"
@@ -298,15 +267,26 @@
    (psearch true))
   ([doprint]
    (println "Searching maze")
-   (let [futs (init-run)
-         terms (mapv #(deref % 10000 :timed-out) futs)]
-     (if (every? #(= :terminated %) terms)
+   (let [status (init-run)
+         ;; terms (mapv #(deref % 10000 :timed-out) futs)
+         ]
+     (if #_(every? #(= :terminated %) terms)
+       (= status :ok)
        (do
-         (println "All terminated")
+         #_(println "All terminated")
          (finish-up doprint))
        (do
-         (println "Error:" terms)
-         (map future-cancel futs)))
-     futs)))
+         (println "No path found")
+         #_(map future-cancel futs)))
+     #_futs)))
+
+(defn status
+  []
+  (let [registers (into mbuff/input-buffs mbuff/open-qs)]
+    (println "counts" (mapv mbuff/get-count registers))
+    (println "clocks" (mapv mbuff/get-clock registers))
+    (println "tmaxes" (mapv mbuff/get-tmax registers))
+    (println "should-term" @should-terminate?)
+    (println "path-not" @path-not-found?)))
 
 

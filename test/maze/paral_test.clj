@@ -64,3 +64,24 @@
           (is (nil? (v 3))))
         (let [closed-node (mbuff/find-in-closed closed (:loc (mb/start-node)))]
           (is (= (mb/start-node) closed-node)))))))
+
+(defn test-nfd
+  []
+  (mpar/reset-all)
+  (mbuff/put-buff (mbuff/input-buffs 0) [0 mb/start-node])
+  (let [fut (future-call mpar/not-found-detector)
+        test1 (atom nil)
+        test2 (atom nil)]
+    (reset! test1 @mpar/should-terminate?)
+    (Thread/sleep (rand-int 50))
+    (mbuff/take-buff (mbuff/input-buffs 0))
+    (Thread/sleep 500)
+    (reset! test2 @mpar/should-terminate?)
+    (future-cancel fut)
+    (if (and (not @test1) @test2)
+      :pass
+      :fail)))
+
+(deftest test-not-found-detector
+  (testing "not found detector"
+    (is (= :pass (test-nfd)))))
