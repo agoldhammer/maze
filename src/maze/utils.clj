@@ -125,3 +125,19 @@
 
 (defn log [thread-num & mesg]
   (send log-agent #(println (clojure.string/join " " (concat (str thread-num) mesg)) %)))
+
+(defn ticks
+  "time function call f in milliseconds"
+  [f & args]
+  (let [start (System/nanoTime)
+        res (apply f args)
+        end (System/nanoTime)
+        t (/ (- end start) 1e6)]
+    {:result res :time t}))
+
+(defn speedup
+  "return ration of execution time of 2 functions"
+  [f g & args]
+  (let [t1 (:time (apply ticks f args))
+        t2 (:time (apply ticks g args))]
+    (/ t2 t1)))
