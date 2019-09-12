@@ -227,37 +227,40 @@
           (recur (conj path loc) next-node)
           (conj path loc))))))
 
-(defn finish-up
-  [doprint]
-  (if-let [node (:node @incumbent)]
-    (let [path (pextract-path node)]
-      (when doprint
-        (doseq [ln (mo/a-overlay-path path)]
-          (println ln))
-        (mu/print-maze-params))
-      (println "Found: Path length: " (count path)))
-    (println "No path found"))
-  '***)
+(defn print-maze-with-overlay
+  [path plen]
+  (doseq [ln (mo/a-overlay-path path)]
+    (println ln))
+  (println "Path length:" plen)
+  (mu/print-maze-params)
+  '***
+  )
 
-;; https://stackoverflow.com/questions/42700407/immediately-kill-a-running-future-thread
+
+(defn finish-up
+  [action]
+  (if-let [node (:node @incumbent)]
+    (let [path (pextract-path node)
+          plen (count path)
+          stats (mp/get-stats plen)]
+      (condp = action
+        :print (print-maze-with-overlay path plen)
+        :noprint (do (mu/print-maze-params)
+                     (println "Path length:" plen))
+        :stats stats
+        stats))))
+
 (defn psearch
-  "start a new || astar search; print path overlaid result if doprint is true"
+    "start a new || astar search; print path overlaid result if action is :print;
+    return stats if action is :stats; print results without maze if action is :noprint or missing"
   ([]
-   (psearch true))
-  ([doprint]
-   (println "Searching maze")
-   (let [status (init-run)
-         ;; terms (mapv #(deref % 10000 :timed-out) futs)
-         ]
-     (if #_(every? #(= :terminated %) terms)
-       (= status :ok)
-       (do
-         #_(println "All terminated")
-         (finish-up doprint))
-       (do
-         (println "No path found")
-         #_(map future-cancel futs)))
-     #_futs)))
+   (psearch :print))
+  ([action]
+   #_(println "Searching maze")
+   (let [status (init-run)]
+     (if (= status :ok)
+       (finish-up action)
+       (println "No path found")))))
 
 (defn status
   []

@@ -75,7 +75,7 @@
   (println "Size:" mp/size* " Sparsity:" mp/sparsity*)
   (println "Start:" mp/start*)
   (println "Goal:" mp/goal*)
-  (println "Max frontier size:" @mp/max-frontier-size))
+  #_(println "Max frontier size:" @mp/max-frontier-size))
 
 (defn print-maze
   "if doall, print maze with params; else just print params"
@@ -138,6 +138,9 @@
 (defn speedup
   "return ration of execution time of 2 functions"
   [f g & args]
-  (let [t1 (:time (apply ticks f args))
-        t2 (:time (apply ticks g args))]
-    (/ t2 t1)))
+  (let [r1 (apply ticks f args)
+        r2 (apply ticks g args)]
+    {:stats1 (:result r1)
+     :stats2 (:result r2)
+     :time1 (:time r1)
+     :speedup (/ (:time r2) (:time r1))}))

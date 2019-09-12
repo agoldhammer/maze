@@ -8,18 +8,19 @@
             #_[criterium.core :as cr])
   (:gen-class))
 
-(def DEBUG 0)
-
-(defmacro on-debug [& body]
-  `(when (> DEBUG 1)
-     (do ~@body)))
-
-(defmacro dbg [x]
-  `(when (> DEBUG 0)
-     (println ~(format "%s:%s> is"
-                       *file*
-                       (:line (meta &form)))
-              ~x)))
+(comment 
+ (def DEBUG 0)
+ 
+ (defmacro on-debug [& body]
+   `(when (> DEBUG 1)
+      (do ~@body)))
+ 
+ (defmacro dbg [x]
+   `(when (> DEBUG 0)
+      (println ~(format "%s:%s> is"
+                        *file*
+                        (:line (meta &form)))
+               ~x))))
 
 #_(def pq (priority-queue 100 node-comp))
 
@@ -143,25 +144,35 @@
            (mu/print-maze-params))
          (println "No path was found"))))))
 
+(defn print-maze
+  [path]
+  (doseq [ln (mo/a-overlay-path path)]
+    (println ln))
+  (println "Found: Path length: " (count path))
+  (mu/print-maze-params)
+  '***)
+
 (defn astar
   "start a new astar search; print path overlaid result if doprint is true"
   ([]
-   (astar true))
-  ([doprint]
+   (astar :print))
+  ([action]
    (dosync (ref-set mp/a-visited* (hash-map)))
    (send mp/max-frontier-size (constantly 0) 0)
    (let [start-frontier (mb/astar-start-frontier)]
      (let [{:keys [found]} (astar-search-maze start-frontier mp/goal*)]
        (if found
-         (do
-           (let [path (mo/extract-path)]
-             (when doprint
-               (doseq [ln (mo/a-overlay-path path)]
-                 (println ln)))
-             (println "Found: Path length: " (count path))
-             (mu/print-maze-params)))
+         (let [path (mo/extract-path)
+               plen (count path)
+               stats (mp/get-stats plen)]
+           (condp = action
+             :print (print-maze path)
+             :stats  stats
+             :noprint (do (mu/print-maze-params)
+                          (println "Path length:" plen))
+             stats))
          (println "No path was found"))))))
-
+     
 (defn new-maze-problem
   [size sparsity]
   (mu/make-maze size sparsity)
@@ -196,16 +207,14 @@
 (defn pstar
   "do parallel astar search, print if doprint true"
   ([]
-   (pstar true))
-  ([doprint]
-   (mpar/psearch doprint)))
+   (pstar :print))
+  ([action]
+   (mpar/psearch action)))
 
 (defn compstar
   "compare astar and pstar"
-  [doprint]
-  (time (astar doprint))
-  (time (pstar doprint))
-  #_(cr/execute-expression 1 pstar))
+  []
+  (mu/speedup pstar astar false))
 
 (defn -main
   "I don't do a whole lot ... yet."
@@ -215,4 +224,11 @@
 (comment
   (make-full-maze 50 30)
   (start-search) ; bfs
-  (start-search :dfs true)) ; dfs
+  (start-search :dfs true)
+  (astar :print)
+  (astar :stats)
+  (pstar :noprint)
+  ; params to search can be :print, :noprint, or :stats; default is :print
+  (compstar) ;compare times of pstar and astar
+  ) ; dfs
+

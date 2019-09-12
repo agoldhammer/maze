@@ -11,3 +11,9 @@
 
 (def nthreads (.availableProcessors (Runtime/getRuntime)))
 (def split-frontier-at 32)
+
+(defn get-stats
+  [plen]
+  {:size size*
+   :sparsity sparsity*
+   :path plen})
