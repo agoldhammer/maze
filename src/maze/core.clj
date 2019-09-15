@@ -235,6 +235,17 @@
       #_(mu/ticks pstar :stats)
       (avg-speedup ntimes))))
 
+;; USAGE: (to-edn "stats.edn" compile-stats ntimes start stop step sparsity)
+(defn to-edn
+  "save stats to edn file"
+  [fname f & args]
+  (spit fname (pr-str (apply f args))))
+
+(defn from-edn
+  "read from edn file"
+  [fname]
+  (clojure.edn/read-string (slurp fname)))
+
 (defn -main
   "I don't do a whole lot ... yet."
   [& args]
