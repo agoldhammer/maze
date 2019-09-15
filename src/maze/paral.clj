@@ -260,7 +260,9 @@
    (let [status (init-run)]
      (if (= status :ok)
        (finish-up action)
-       (println "No path found")))))
+       (if (= action :print)
+         (println "No path found")
+         nil)))))
 
 (defn status
   []

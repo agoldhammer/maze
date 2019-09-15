@@ -144,3 +144,15 @@
      :stats2 (:result r2)
      :time1 (:time r1)
      :speedup (/ (:time r2) (:time r1))}))
+
+(defn extract-data
+  "extract relevant data from compstar result for feed to graph"
+  [input]
+  (let [speedup (:speedup input)
+        time (:time1 input)]
+    (if-let [data (:stats1 input)]
+      (let [path (:path data)
+            size (:size data)]
+        {:time time :speedup speedup :path path :size size})
+      {:time time :speedup speedup :path nil :size nil})))
+

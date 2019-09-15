@@ -171,7 +171,8 @@
              :noprint (do (mu/print-maze-params)
                           (println "Path length:" plen))
              stats))
-         (println "No path was found"))))))
+         (when (= action :print)
+           (println "No path was found")))))))
      
 (defn new-maze-problem
   [size sparsity]
@@ -214,7 +215,25 @@
 (defn compstar
   "compare astar and pstar"
   []
-  (mu/speedup pstar astar false))
+  (mu/speedup pstar astar :stats))
+
+(defn avg-speedup
+  "average n runs of compstar and extract relevant data"
+  [n]
+  (let [runs (map mu/extract-data (take n (repeatedly compstar)))
+        avg-time (/ (reduce + (map #(:time %) runs)) n)
+        avg-speedup (/ (reduce + (map #(:speedup %) runs)) n)
+        run (first runs)]
+    {:path (:path run) :size (:size run) :avg-time avg-time :avg-speedup avg-speedup}))
+
+(defn compile-stats
+  "compile statistics on mazes of varying size, repeating/averaging measurement ntimes on each"
+  [ntimes start stop step sparsity]
+  (for [size (range start stop step)]
+    (do
+      (make-maze size sparsity false)
+      #_(mu/ticks pstar :stats)
+      (avg-speedup ntimes))))
 
 (defn -main
   "I don't do a whole lot ... yet."
@@ -222,13 +241,13 @@
   (println "Hello, World!"))
 
 (comment
-  (make-full-maze 50 30)
-  (start-search) ; bfs
-  (start-search :dfs true)
-  (astar :print)
-  (astar :stats)
-  (pstar :noprint)
-  ; params to search can be :print, :noprint, or :stats; default is :print
+ (make-full-maze 50 30)
+ (start-search) ; bfs
+ (start-search :dfs true)
+ (astar :print)
+ (astar :stats)
+ (pstar :noprint)
+ ; params to search can be :print, :noprint, or :stats; default is :print
   (compstar) ;compare times of pstar and astar
   ) ; dfs
 
