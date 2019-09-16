@@ -5,6 +5,7 @@
             [maze.overlay :as mo]
             [maze.utils :as mu :refer [make-maze]]
             [maze.paral :as mpar]
+            [clojure.set]
             #_[criterium.core :as cr])
   (:gen-class))
 
@@ -239,23 +240,29 @@
   "compile statistics on mazes of varying size, repeating measurement ntimes on each"
   [ntimes size sparsity]
   (do
-    (println "runstat" size)
     (make-maze size sparsity false)
-    (let [res  
-          (take ntimes (repeatedly compstar))]
-      (println "runstat" res)
-      res)))
+    (doall (take ntimes (repeatedly compstar)))))
+
+(defn correct-keys
+  "correct keys in stats map and handle case of no path found"
+  [stat]
+  (let [corrected (clojure.set/rename-keys stat {:time1 :time})]
+    (if-not (get corrected :path)
+      (merge corrected {:path 0 :size 0 :sparsity 0})
+      corrected)))
 
 (defn compile-stats
   "compile statistics on mazes of varying size, repeating measurement ntimes on each"
   [ntimes start stop step sparsity]
   (let [f (fn [stat] (dissoc (merge stat (:stats1 stat)) :stats1 :stats2))]
-    (for [size (range start stop step)]
-      (let [res 
-            (run-stat ntimes size sparsity)]
-        res)) ))
+    (doall (map correct-keys
+                (doall (map f
+                            (apply concat (for [size (range start stop step)]
+                                            (let [res 
+                                                  (run-stat ntimes size sparsity)]
+                                              res)))))))))
 
-;; USAGE: (to-edn "stats.edn" compile-stats ntimes start stop step sparsity)
+;; USAGE: (to-edn "stats.edn" compile-stats/compile-avg-stats ntimes start stop step sparsity)
 (defn to-edn
   "save stats to edn file"
   [fname f & args]
