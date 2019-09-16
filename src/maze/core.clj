@@ -226,7 +226,7 @@
         run (first runs)]
     {:path (:path run) :size (:size run) :avg-time avg-time :avg-speedup avg-speedup}))
 
-(defn compile-stats
+(defn compile-avg-stats
   "compile statistics on mazes of varying size, repeating/averaging measurement ntimes on each"
   [ntimes start stop step sparsity]
   (for [size (range start stop step)]
@@ -234,6 +234,26 @@
       (make-maze size sparsity false)
       #_(mu/ticks pstar :stats)
       (avg-speedup ntimes))))
+
+(defn run-stat
+  "compile statistics on mazes of varying size, repeating measurement ntimes on each"
+  [ntimes size sparsity]
+  (do
+    (println "runstat" size)
+    (make-maze size sparsity false)
+    (let [res  
+          (take ntimes (repeatedly compstar))]
+      (println "runstat" res)
+      res)))
+
+(defn compile-stats
+  "compile statistics on mazes of varying size, repeating measurement ntimes on each"
+  [ntimes start stop step sparsity]
+  (let [f (fn [stat] (dissoc (merge stat (:stats1 stat)) :stats1 :stats2))]
+    (for [size (range start stop step)]
+      (let [res 
+            (run-stat ntimes size sparsity)]
+        res)) ))
 
 ;; USAGE: (to-edn "stats.edn" compile-stats ntimes start stop step sparsity)
 (defn to-edn
