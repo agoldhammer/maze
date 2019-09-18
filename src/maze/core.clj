@@ -262,6 +262,24 @@
                                                   (run-stat ntimes size sparsity)]
                                               res)))))))))
 
+(defn pstar-stat
+  "get stats on pstar for maze of size and sparsity"
+  [size sparsity]
+  (let [f (fn [stat] (dissoc (merge stat (:result stat)) :result))
+        _ (make-maze size sparsity false)
+        res (f (mu/ticks pstar false))]
+    ; handle case where there is no path
+    (if-not (nil? (:path res))
+      res
+      (merge res {:path 0 :size size :sparsity sparsity}))))
+
+(defn pstar-stats
+  "compile statistics using pstar only, ntimes examples at each size"
+  [ntimes start stop step sparsity]
+  (apply concat 
+    (for [size (range start stop step)]
+      (take ntimes (repeatedly #(pstar-stat size sparsity))))))
+
 ;; USAGE: (to-edn "stats.edn" compile-stats/compile-avg-stats ntimes start stop step sparsity)
 (defn to-edn
   "save stats to edn file"
@@ -279,12 +297,14 @@
   (println "Hello, World!"))
 
 (comment
- (make-full-maze 50 30)
- (start-search) ; bfs
- (start-search :dfs true)
- (astar :print)
- (astar :stats)
- (pstar :noprint)
+  (make-full-maze 50 30)
+  (start-search) ; bfs
+  (start-search :dfs true)
+  (astar :print)
+  (astar :stats)
+  (pstar :noprint)
+  ;; to compile stats on pstar runs, 2 at each size, in size range 40 to 70 by 10s, sparsity 30
+  (to-edn "stats.edn" pstar-stats 2 40 80 10 30)
  ; params to search can be :print, :noprint, or :stats; default is :print
   (compstar) ;compare times of pstar and astar
   ) ; dfs
