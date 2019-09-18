@@ -19,7 +19,8 @@
   (poll-buff [this] "take next basic msg if present")
   (put-buff [this time-stamped-msg] "add basic msg")
   (vide? [this] "buffer empty?")
-  (quickpeek [this] "Peek at next"))
+  (quickpeek [this] "Peek at next")
+  (buff-reset! [this] "Clear the queue and reset clock and tmax"))
 
 (deftype CountedBuffer [buff clock tmax])
 
@@ -64,7 +65,11 @@
   (vide? [this]
     (.isEmpty (.buff this)))
   (quickpeek [this]
-    (.peek (.buff this))))
+    (.peek (.buff this)))
+  (buff-reset! [this]
+    (.clear (.buff this))
+    (reset! (.clock this) 0)
+    (reset! (.tmax this) 0)))
 
 (defn hash-of-loc
   "compute hash of loc of node"
@@ -82,12 +87,17 @@
 
 ;;; key variables
 (def input-buffs [])
-(def ctrl-msgs)
+#_(def ctrl-msgs)
 (def ctrl-wave-in-progress? (atom false))
-
 (def open-qs [])
 (def closed-locs [])
 (def incumbent (atom {}))
+
+(alter-var-root #'input-buffs (constantly (into [] (repeatedly mp/nthreads new-open-queue))))
+(alter-var-root #'open-qs (constantly (into [] (repeatedly mp/nthreads new-open-queue))))
+(alter-var-root #'closed-locs (constantly (into [] (repeatedly mp/nthreads #(atom {})))))
+
+
 
 (defmacro create-thing
   [n create-fn init-val]
@@ -98,11 +108,14 @@
   []
   (reset! incumbent {:cost Integer/MAX_VALUE :node nil})
   (reset! ctrl-wave-in-progress? false)
+  (doseq [buff input-buffs] (buff-reset! buff))
+  (doseq [buff open-qs] (buff-reset! buff))
+  (doseq [closed-loc closed-locs] (reset! closed-loc {}))
   
   #_(alter-var-root #'input-buffs (constantly (into [] (repeatedly mp/nthreads new-counted-buffer))))
-  (alter-var-root #'input-buffs (constantly (into [] (repeatedly mp/nthreads new-open-queue))))
-  (alter-var-root #'open-qs (constantly (into [] (repeatedly mp/nthreads new-open-queue))))
-  (alter-var-root #'closed-locs (constantly (into [] (repeatedly mp/nthreads #(atom {})))))
+  #_(alter-var-root #'input-buffs (constantly (into [] (repeatedly mp/nthreads new-open-queue))))
+  #_(alter-var-root #'open-qs (constantly (into [] (repeatedly mp/nthreads new-open-queue))))
+  #_(alter-var-root #'closed-locs (constantly (into [] (repeatedly mp/nthreads #(atom {})))))
   
   #_(doseq [[sym create-fn init] [[#'buffers atom #{}] [#'counters atom 0]
                                   [#'clocks atom 0] [#'tmaxes atom 0]
